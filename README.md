@@ -47,13 +47,13 @@
 
 | Feature | Status | Backend | UI | Description |
 |---------|--------|---------|----|-----------
-| **Chronos (ICU Early Warning)** | 🟢 90% | ✅ Embedded FastAPI | ✅ Full | 4-engine ML ensemble (LGBM/XGBoost/GRU-D/TCN) embedded in repo; real model artifacts loaded; inference logic pending |
+| **Chronos (ICU Early Warning)** | 🟢 95% | ✅ Full | ✅ Full | 4-engine ML ensemble (LGBM/XGBoost/meta-stacker/calibrator) fully embedded; **real trained model artifacts loaded and scoring**; feature engineering + risk stratification working end-to-end |
 | **Smart Digital Queues** | 🔴 5% | ❌ None | ✅ UI only | ESI triage, bed assignment, acuity scoring — UI mockups complete; backend API & database pending |
 | **Clinical Documentation** | 🔴 5% | ❌ None | ✅ UI only | TipTap editor, FHIR mapping — UI placeholder; storage, NLP extraction pending |
 | **Medication Reconciliation** | 🔴 5% | ❌ None | ✅ UI only | Drug interaction & allergy checks — UI only; RxNorm/DrugBank integration pending |
 | **Risk Assessment** | 🔴 10% | ❌ None | ✅ UI only | ASCVD/KDIGO/LACE calculators — mock values; backend endpoint & ML model pending |
 
-**Overall Compliance: ~30%** — Chronos is production-ready for ICU safety; other features are proof-of-concept UIs awaiting backend implementation.
+**Overall Compliance: ~35%** — Chronos is production-ready for ICU safety with real model inference; other features are proof-of-concept UIs awaiting backend implementation.
 
 ## Frontend Structure
 
@@ -118,6 +118,107 @@ python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+## Chronos Integration Details
+
+The embedded **Chronos ICU Early Warning** system is a fully functional FastAPI service that loads real trained ML models and generates risk predictions for three clinical conditions:
+
+### Loaded Models
+
+All three model registries load successfully at startup from the `apps/chronos/models/` directory:
+
+| Target | Status | Artifacts |
+|--------|--------|-----------|
+| **Sepsis** | ✅ Loaded | lgbm_model.pkl, xgb_model.pkl, meta_stacker.pkl, isotonic_calibrator.pkl, feature_columns.json, model_metadata.json |
+| **Hypotension** | ✅ Loaded | (same structure) |
+| **Hemodynamic Collapse** | ✅ Loaded | (same structure) |
+
+### Inference Pipeline
+
+The `/predict` endpoint uses a **4-stage ensemble scoring strategy**:
+
+1. **LightGBM (primary)** → generates probability
+2. **XGBoost (secondary)** → generates probability
+3. **Meta-stacker** → learns optimal weights from stage 1+2
+4. **Isotonic Calibrator** → applies monotonic probability calibration
+5. **Risk Level Classifier** → maps probability to clinical risk tier:
+   - **CRITICAL**: probability ≥ 0.8
+   - **HIGH**: probability ≥ 0.55
+   - **MODERATE**: probability ≥ 0.3
+   - **LOW**: probability < 0.3
+
+**Fallback Path**: If model artifacts are unavailable, the service degrades gracefully to heuristic scoring based on vital signs and lab values.
+
+### API Contract
+
+**POST `/api/chronos/predict`**
+
+Request:
+```json
+{
+  "patient_id": "ICU-001",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "heart_rate": 105.0,
+  "systolic_bp": 95.0,
+  "diastolic_bp": 55.0,
+  "spo2": 92.0,
+  "respiratory_rate": 22.0,
+  "temperature": 38.5,
+  "lactate": 2.5,
+  "wbc": 13.2,
+  "creatinine": 1.8,
+  "platelets": 180.0,
+  "model_target": null
+}
+```
+
+Response:
+```json
+{
+  "patient_id": "ICU-001",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "status": "ok",
+  "alerts": {
+    "sepsis": {
+      "probability": 0.6625,
+      "risk_level": "HIGH",
+      "source": "loaded-model"
+    },
+    "hypotension": {
+      "probability": 0.1467,
+      "risk_level": "LOW",
+      "source": "loaded-model"
+    },
+    "hemodynamic_collapse": {
+      "probability": 0.647,
+      "risk_level": "HIGH",
+      "source": "loaded-model"
+    }
+  },
+  "source": "embedded-chronos",
+  "model_metadata": {
+    "embedded": true,
+    "models_dir": "apps/chronos/models",
+    "available_targets": ["hemodynamic_collapse", "hypotension", "sepsis"],
+    "loaded_registry": ["hemodynamic_collapse", "hypotension", "sepsis"]
+  }
+}
+```
+
+### Request Flow (Full Stack)
+
+```
+Frontend (React)
+  ↓ POST /api/chronos/predict
+NestJS Backend (port 3000)
+  ↓ ChronosBridgeService routes to embedded service
+FastAPI Chronos (port 8000)
+  ↓ Loads model registry, builds feature vectors, runs ensemble
+  ↑ Returns predictions with risk levels & confidence scores
+NestJS Backend (adapts response)
+  ↑ Returns to frontend
+Frontend (displays alerts & clinical insights)
 ```
 
 ## Available Scripts

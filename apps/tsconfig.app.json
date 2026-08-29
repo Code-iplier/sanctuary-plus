@@ -1,16 +1,27 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
+    "composite": true,
+    "declaration": true,
     "outDir": "dist",
     "module": "nodenext",
-    "types": ["node"],
-    "rootDir": "src",
     "moduleResolution": "nodenext",
+    "target": "es2021",
+    "types": ["node"],
+    "rootDir": "backend/src",
     "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "target": "es2021"
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": []
+  "include": [
+    "backend/src/**/*.ts"
+  ],
+  "exclude": [
+    "**/*.spec.ts",
+    "**/*.test.ts"
+  ]
 }

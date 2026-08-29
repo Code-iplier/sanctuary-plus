@@ -1,4 +1,3 @@
-import React from 'react';
 import { Card, Badge, ProgressBar, Tabs, Avatar } from '@heroui/react';
 import { Users, Heart, Clock, Bed } from 'lucide-react';
 

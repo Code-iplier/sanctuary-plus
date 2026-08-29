@@ -1,4 +1,3 @@
-import React from 'react';
 import { Card, Badge, Button, Input, Tabs, Alert } from '@heroui/react';
 import { Pill, ShieldCheck, AlertTriangle, Plus } from 'lucide-react';
 

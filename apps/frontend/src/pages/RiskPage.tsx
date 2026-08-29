@@ -1,4 +1,3 @@
-import React from 'react';
 import { Card, Badge, Button, Tabs, ProgressBar } from '@heroui/react';
 import {
   Chart as ChartJS,

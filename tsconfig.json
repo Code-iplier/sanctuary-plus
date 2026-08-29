@@ -4,9 +4,6 @@
   "files": [],
   "references": [
     {
-      "path": "./packages/api/products"
-    },
-    {
       "path": "./packages/shared/models"
     },
     {
@@ -17,6 +14,9 @@
     },
     {
       "path": "./apps/backend"
+    },
+    {
+      "path": "./apps/frontend"
     }
   ]
 }

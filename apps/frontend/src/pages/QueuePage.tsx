@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card, Badge, Button, Input, Tabs } from '@heroui/react';
 import { Plus, Bed } from 'lucide-react';
 
