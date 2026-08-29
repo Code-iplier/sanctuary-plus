@@ -6,7 +6,6 @@
   "private": true,
   "dependencies": {
     "@heroui/react": "^3.2.4",
-    "@heroui/theme": "^2.4.26",
     "@hookform/resolvers": "^5.9.1",
     "@nestjs/common": "^12.0.1",
     "@nestjs/config": "^12.0.0",
@@ -43,8 +42,8 @@
     "@babel/core": "^7.14.5",
     "@babel/preset-react": "^7.14.5",
     "@eslint/js": "^9.8.0",
-    "@nestjs/schematics": "^11.0.0",
-    "@nestjs/testing": "^11.0.0",
+    "@nestjs/schematics": "^12.0.0",
+    "@nestjs/testing": "^12.0.0",
     "@nx/devkit": "23.1.1",
     "@nx/docker": "23.1.1",
     "@nx/esbuild": "23.1.1",
@@ -103,8 +102,6 @@
     "apps/*",
     "packages/api/products",
     "packages/shared/*",
-    "packages/shop/*",
-    "apps",
-    "apps-e2e"
+    "apps"
   ]
 }
