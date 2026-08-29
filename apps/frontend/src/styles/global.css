@@ -1,0 +1,104 @@
+@import 'tailwindcss';
+@import '@heroui/styles';
+
+/* Hero UI base styles */
+:root {
+  --hero-color-primary: #0891b2;
+  --hero-color-primary-foreground: #ffffff;
+  --hero-color-secondary: #64748b;
+  --hero-color-secondary-foreground: #ffffff;
+}
+
+/* Light mode default - clinical interface */
+body {
+  font-family: 'Inter', 'system-ui', sans-serif;
+  background-color: #f8f9fa;
+  color: #1e293b;
+}
+
+/* Custom component overrides for healthcare */
+.triage-critical {
+  background-color: #fecaca;
+  color: #dc2626;
+  border: 2px solid #fea5a5;
+}
+
+.triage-high {
+  background-color: #fed7aa;
+  color: #ea580c;
+  border: 2px solid #fec896;
+}
+
+.triage-moderate {
+  background-color: #fde68a;
+  color: #ca8a04;
+  border: 2px solid #fde080;
+}
+
+.triage-low {
+  background-color: #dcfce7;
+  color: #16a34a;
+  border: 2px solid #a7f3d0;
+}
+
+/* Hero UI theme customization */
+.heroui-light {
+  --color-primary: #0891b2;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #64748b;
+  --color-secondary-foreground: #ffffff;
+}
+
+/* Card hover effects */
+.card-hover:hover {
+  transition: all 0.2s ease;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Progress bar striped */
+.progress-stripe .progress-bar {
+  background: linear-gradient(
+    90deg,
+    #0891b2 25%,
+    #64748b 25%,
+    #64748b 50%,
+    #0891b2 50%,
+    #0891b2 75%,
+    #64748b 75%,
+    #64748b 100%
+  );
+  background-size: 1rem 1rem;
+  animation: progress-stripe 1s linear infinite;
+}
+
+/* Button hover */
+button:hover {
+  transition: all 0.15s ease;
+}
+
+/* Table row hover */
+tr:hover {
+  background-color: #f1f5f9;
+}
+
+/* Badge color utilities */
+.badge-critical {
+  background-color: #dc2626;
+  color: #ffffff;
+}
+
+.badge-high {
+  background-color: #ea580c;
+  color: #ffffff;
+}
+
+.badge-moderate {
+  background-color: #ca8a04;
+  color: #ffffff;
+}
+
+.badge-low {
+  background-color: #16a34a;
+  color: #ffffff;
+}

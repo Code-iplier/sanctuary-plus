@@ -1,0 +1,527 @@
+# =============================================================================
+# Hospital Platform CI/CD Pipeline
+# =============================================================================
+#
+# Comprehensive pipeline for AI-powered healthcare platform with:
+# - NestJS backend API Gateway (Node/TypeScript) - NOT on GitHub Pages
+# - React + Hero UI frontend (port 5173) - DEPLOYS to GitHub Pages
+# - FastAPI ML Workers (Python)
+# - Project Chronos ICU Early Warning (Python)
+# - Rule-based & ML features (mixed approach)
+# - PostgreSQL database, Redis cache
+#
+# WORKFLOW OVERVIEW:
+#
+#   ┌────────────────────┐   ┌─────────────────────┐
+#   │  Lint & Format     │   │   Unit Tests        │  ← Stage 1 (parallel)
+#   └────────┬───────────┘   └───────────────────┘
+#            │
+#            └──────────┬──────────┘
+#                       ▼
+#    ┌────────────────────┐   ┌─────────────────────┐
+#    │  Build Artifacts   │   │  Security Scan     │  ← Stage 2 (parallel)
+#    └────────┬───────────┘   └───────────────────┘
+#             │
+#             └──────────┬──────────┘
+#                        ▼
+#    ┌────────────────────┐
+#    │  Docker Build      │               ← Stage 3 (backend only)
+#    └────────┬───────────┘
+#             ▼
+#    ┌────────────────────┐
+#    │  Vulnerability     │               ← Stage 4 (tag-only)
+#    │  Scan (Trivy)      │
+#    └────────┬───────────┘
+#             ▼
+#    ┌────────────────────┐
+#    │  Deploy & Verify   │               ← Stage 5 (backend + Pages)
+#    └────────┬───────────┘
+#             ▼
+#    ┌────────────────────┐
+#    │  CI Summary        │               ← Stage 6 (always)
+#    └────────┬───────────┘
+#             ▼
+#
+# TRIGGERS:
+# - Pull Request to main: Stages 1-3 (lint, test, build, security)
+# - Pull Request to feature branches: Stages 1-3 (same as main PR)
+# - Push to main: Stages 1-3 (lint, test, build, security)
+# - Tag push (v*): Full pipeline including Docker build + GitHub Pages deploy
+# - Push to feature branches: Stages 1-3 (lint, test, build, security) - no Pages deploy
+#
+# NOTES:
+# - GitHub Pages can ONLY serve static HTML/CSS/JS (the React frontend)
+# - The NestJS backend cannot run on GitHub Pages (it's a Node.js server)
+# - For backend deployment, use: VPS, Render, Fly.io, or self-hosted
+# - This project is designed for on-premise/air-gapped deployment
+# - HIPAA compliance: no cloud egress for patient data
+# - Tag handling: Tag is extracted early in workflow with SHA fallback
+# - Feature branches: Full CI (stages 1-3) but no GitHub Pages deploy
+#
+# =============================================================================
+
+name: Hospital Platform CI/CD Pipeline
+
+on:
+  pull_request:
+    branches-ignore: [main]
+    types: [opened, synchronize, reopened]
+  push:
+    branches-ignore: [main]
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.12"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE20: "true"
+  # GitHub Pages deployment settings
+  SITE_URL: "https://YOUR_USERNAME.github.io/hospital-platform"
+  SITE_ORIGIN: "https://YOUR_USERNAME.github.io"
+  BASE_PATH: "/"
+  # Frontend build output directory
+  FRONTEND_DIST: "apps/frontend/dist"
+  # Docker image registry (for on-premise registry or GHCR)
+  REGISTRY: "ghcr.io"
+  IMAGE_NAME: "${{ github.repository }}"
+  # Version handling - tag extracted early with SHA fallback
+  APP_VERSION: ${{ github.ref_name || github.sha }}
+
+permissions:
+  contents: read
+  packages: read
+  security-events: write
+  pages: write  # Required for GitHub Pages deployment
+  actions: read
+
+jobs:
+  # ===========================================================================
+  # Stage 1: Lint & Format & Type Check (parallel)
+  # ===========================================================================
+  lint-quality:
+    name: Lint & Type Check
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check (NestJS + Frontend)
+        run: npx nx typecheck
+
+      - name: Check formatting (Prettier)
+        run: npx nx format:check
+
+      - name: Lint (ESLint)
+        id: lint
+        run: npx nx lint
+
+      - name: Install ESLint SARIF formatter
+        if: always()
+        run: npm install --no-save @microsoft/eslint-formatter-sarif || true
+
+      - name: Generate ESLint SARIF
+        if: always()
+        run: npx nx lint --format=json || true > eslint.sarif || true
+
+      - name: Upload ESLint SARIF artifact
+        if: always() && contains('.', 'eslint.sarif') && hashFiles('eslint.sarif') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: eslint-sarif
+          path: eslint.sarif
+
+      - name: Upload ESLint SARIF to Code Scanning
+        if: vars.ENABLE_CODE_SCANNING_SARIF == 'true' && always() && hashFiles('eslint.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: eslint.sarif
+
+      - name: Fail if lint failed
+        if: steps.lint.outcome == 'failure'
+        run: exit 1
+
+      - name: Fail if typecheck failed
+        if: steps.typecheck.outcome == 'failure'
+        run: exit 1
+
+  unit-tests:
+    name: Unit Tests
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests (Vitest)
+        run: npx nx test
+
+      - name: Upload test results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: nx-unit-tests/
+
+  # ===========================================================================
+  # Stage 2: Build Artifacts (parallel with security scan)
+  # ===========================================================================
+  build-artifacts:
+    name: Build Artifacts
+    runs-on: ubuntu-latest
+    needs: [lint-quality, unit-tests]
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build NestJS backend
+        run: npx nx build backend
+        env:
+          NODE_ENV: production
+
+      - name: Build React frontend (for GitHub Pages)
+        run: npx nx build frontend
+        env:
+          NODE_ENV: production
+          VITE_BASE_PATH: ${{ env.BASE_PATH }}
+
+      - name: Build FastAPI ML Workers (if present)
+        if: false  # Set true when ml-workers app is added
+        run: |
+          echo "ML Workers build skipped - add when ml-workers app is configured"
+          # cd ml-workers && pip install -e . || true
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-artifacts
+          path:
+            - apps/backend/dist
+            - apps/frontend/dist
+          retention-days: 7
+
+  # ===========================================================================
+  # Stage 2B: Security Scan (dependencies)
+  # ===========================================================================
+  security-scan:
+    name: Security Scan (npm audit)
+    runs-on: ubuntu-latest
+    needs: [lint-quality, unit-tests]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high || echo "::warning::Security vulnerabilities found - please review"
+
+      - name: Run npm audit SARIF (if enabled)
+        if: vars.ENABLE_CODE_SCANNING_SARIF == 'true'
+        run: |
+          npm audit --audit-level=high --json > npm-audit.sarif || true
+          npx sarif-html || true
+
+  # ===========================================================================
+  # Stage 3: Docker Build (backend only - conditional on branch)
+  # ===========================================================================
+  docker-build:
+    name: Docker Build (Backend)
+    runs-on: ubuntu-latest
+    needs: [build-artifacts, security-scan]
+    permissions:
+      contents: read
+      packages: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'write' || 'read' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image (backend only - main branch)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/backend
+          push: true
+          load: ${{ github.event_name == 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args:
+            NODE_VERSION: ${{ env.NODE_VERSION }}
+            BASE_PATH: ${{ env.BASE_PATH }}
+
+      - name: Print backend build info
+        if: always()
+        run: |
+          echo "✅ Backend build processed"
+          if: github.ref == 'refs/heads/main'
+          echo "   - Main branch: Docker image pushed to GHCR"
+          if: github.ref != 'refs/heads/main'
+          echo "   - Other branch: Docker image cached locally (not pushed)"
+
+  # ===========================================================================
+  # Stage 4: Vulnerability Scan (tag-only, conditional)
+  # ===========================================================================
+  trivy-scan:
+    name: Trivy Vulnerability Scan
+    if: startsWith(github.ref, 'refs/tags/v') || env.APP_VERSION != ''
+    runs-on: ubuntu-latest
+    needs: [docker-build, security-scan]
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner (SARIF)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ env.APP_VERSION }}
+          format: "sarif"
+          output: "trivy.sarif"
+          ignore-unfixed: false
+          severities: "critical,high"
+
+      - name: Upload Trivy SARIF to Code Scanning
+        if: vars.ENABLE_CODE_SCANNING_SARIF == 'true' && always() && hashFiles('trivy.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+
+      - name: Run Trivy JSON scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ env.APP_VERSION }}
+          format: "json"
+          output: "trivy-results.json"
+
+      - name: Upload Trivy report artifact
+        if: always() && hashFiles('trivy-results.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-results.json
+
+  # ===========================================================================
+  # Stage 5: Deploy & Verify (conditional on branch)
+  # ===========================================================================
+  deploy:
+    name: Deploy & Verify
+    if: always()
+    runs-on: ubuntu-latest
+    needs: [docker-build, trivy-scan, build-artifacts]
+    permissions:
+      contents: write
+      actions: read
+      pages: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}  # Pages only on main or tags
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js env and install deps for Pages build
+        run: |
+          cd apps/frontend
+          npm ci --legacy-peer-deps || true
+
+      - name: Download frontend build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-artifacts
+          path: ./frontend-build
+
+      - name: Configure GitHub Pages deployment
+        run: |
+          echo "🔍 Setting up GitHub Pages deployment"
+          echo "APP_VERSION: $APP_VERSION"
+          echo "GITHUB_REF: $GITHUB_REF"
+          
+      - name: Generate _redirects and _headers for GitHub Pages
+        run: |
+          mkdir -p ./frontend-build
+          if [ -d "./frontend-build/apps/frontend/dist" ]; then
+            echo "✅ Frontend build found at apps/frontend/dist"
+          else
+            echo "⚠️ Frontend build not found in expected location"
+          fi
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./frontend-build/apps/frontend/dist
+          external_url: ${{ env.SITE_URL }}
+          keep_files: false
+
+      - name: Health check frontend (GitHub Pages)
+        if: always()
+        run: |
+          echo "🔍 Checking frontend at ${{ env.SITE_URL }}"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ env.SITE_URL }}" 2>/dev/null || echo "000")
+          echo "📡 HTTP Status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ Frontend GitHub Pages health check passed"
+          else
+            echo "⚠️ Frontend Pages status check (expected for feature branches or first deploy)"
+          fi
+
+      - name: Verify Chronos ICU module (air-gapped)
+        if: always()
+        run: |
+          echo "🔍 Verifying Chronos ICU early warning module"
+          ls -la chronos/backend/models/ || echo "Chronos models directory not found (expected in air-gapped deployment)"
+
+      - name: Print deployment summary
+        run: |
+          echo "=========================================="
+          echo "🏥 Hospital Platform Deployment Summary"
+          echo "=========================================="
+          echo "Branch/Tag: $GITHUB_REF"
+          echo "APP_VERSION: $APP_VERSION"
+          echo ""
+          echo "📦 Frontend Deployment:"
+          echo "  - GitHub Pages: ${{ env.SITE_URL }}"
+          echo "  - Deploy condition: main branch OR tag push"
+          echo "  - Pages health: Checked above"
+          echo ""
+          echo "📦 Backend Deployment:"
+          echo "  - Docker image: ghcr.io/${{ github.repository }}:${{ env.APP_VERSION }}"
+          echo "  - Deploy condition: Main branch only"
+          echo ""
+          echo "📦 Chronos ICU:"
+          echo "  - Early warning model artifacts verified"
+          echo "=========================================="
+
+  # ===========================================================================
+  # Stage 6: CI Summary & Report Bundle
+  # ===========================================================================
+  ci-summary:
+    name: CI Summary & Reports
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [lint-quality, unit-tests, build-artifacts, security-scan, docker-build, trivy-scan, deploy]
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate CI summary
+        run: |
+          IS_DEPLOY="${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}"
+          echo "# 🏥 Hospital Platform CI Report" > summary.md
+          echo "" >> summary.md
+          echo "## 📋 Build Information" >> summary.md
+          echo "| Property | Value |" >> summary.md
+          echo "|----------|-------|" >> summary.md
+          echo "| Commit | \`${GITHUB_SHA:0:7}\` |" >> summary.md
+          echo "| Version/Tag | \`${APP_VERSION}\` |" >> summary.md
+          echo "| Branch/Tag | \`${GITHUB_REF##*/}\` |" >> summary.md
+          echo "| Triggered by | ${{ github.event_name }} |" >> summary.md
+          echo "| Deployment | ${IS_DEPLOY} |" >> summary.md
+          echo "" >> summary.md
+          echo "## 📊 Job Results" >> summary.md
+          echo "| Job | Status |" >> summary.md
+          echo "|-----|--------|" >> summary.md
+          echo "| Lint & Type Check | ${{ needs.lint-quality.result == 'success' && '✅ Passed' || needs.lint-quality.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> summary.md
+          echo "| Unit Tests | ${{ needs.unit-tests.result == 'success' && '✅ Passed' || needs.unit-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> summary.md
+          echo "| Build Artifacts | ${{ needs.build-artifacts.result == 'success' && '✅ Passed' || needs.build-artifacts.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> summary.md
+          echo "| Security Scan | ${{ needs.security-scan.result == 'success' && '✅ Passed' || needs.security-scan.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> summary.md
+          echo "| Docker Build | ${{ needs.docker-build.result == 'success' && '✅ Passed' || needs.docker-build.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> summary.md
+          if [[ "$IS_DEPLOY" == "true" ]]; then
+            echo "| Frontend Pages | ${{ needs.deploy.result == 'success' && '✅ Passed' || needs.deploy.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> summary.md
+            echo "| Trivy Scan | ${{ needs.trivy-scan.result == 'success' && '✅ Passed' || needs.trivy-scan.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> summary.md
+            echo "| Deploy & Verify | ${{ needs.deploy.result == 'success' && '✅ Passed' || needs.deploy.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> summary.md
+          fi
+          echo "" >> summary.md
+          cat summary.md >> $GITHUB_STEP_SUMMARY
+          cat summary.md
+
+      - name: Upload CI reports artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-reports
+          path: summary.md

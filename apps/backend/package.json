@@ -1,0 +1,50 @@
+{
+  "name": "@org/hospital-backend",
+  "version": "0.0.1",
+  "private": true,
+  "nx": {
+    "projectType": "application",
+    "targets": {
+      "build": {
+        "executor": "nx:vite:build",
+        "outputs": [
+          "{options.outputDir}"
+        ]
+      },
+      "serve": {
+        "executor": "nx:vite:preview",
+        "options": {
+          "port": 3000
+        }
+      },
+      "lint": {
+        "executor": "nx:eslint"
+      },
+      "test": {
+        "executor": "nx:vitest",
+        "options": {
+          "passWithNoTests": true
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@nestjs/common": "^12.0.1",
+    "@nestjs/core": "^12.0.1",
+    "@nestjs/platform-express": "^12.0.1",
+    "@nestjs/config": "^12.0.0",
+    "@nestjs/jwt": "^12.0.1",
+    "@nestjs/passport": "^12.0.0",
+    "@nestjs/swagger": "^12.0.1",
+    "@nestjs/websockets": "^12.0.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^12.0.1",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.0"
+  }
+}
