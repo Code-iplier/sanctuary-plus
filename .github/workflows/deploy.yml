@@ -127,14 +127,14 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Type check (NestJS + Frontend)
-        run: npx nx typecheck
+        run: npx nx run-many --target=typecheck --all
 
       - name: Check formatting (Prettier)
         run: npx nx format:check
 
       - name: Lint (ESLint)
         id: lint
-        run: npx nx lint
+        run: npx nx run-many --target=lint --all
 
       - name: Install ESLint SARIF formatter
         if: always()
@@ -142,7 +142,7 @@ jobs:
 
       - name: Generate ESLint SARIF
         if: always()
-        run: npx nx lint --format=json || true > eslint.sarif || true
+        run: npx nx run-many --target=lint --all --format=json > eslint.sarif 2>/dev/null || true
 
       - name: Upload ESLint SARIF artifact
         if: always() && contains('.', 'eslint.sarif') && hashFiles('eslint.sarif') != ''
@@ -189,7 +189,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Run unit tests (Vitest)
-        run: npx nx test
+        run: npx nx run-many --target=test --all
 
       - name: Upload test results artifact
         if: always()
