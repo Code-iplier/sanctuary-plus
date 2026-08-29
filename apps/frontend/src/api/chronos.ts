@@ -65,7 +65,9 @@ export function getPatients(): Promise<ChronosPatients> {
   return request<ChronosPatients>('/patients');
 }
 
-export function predictVitals(payload: Record<string, unknown>): Promise<PredictionResult> {
+export function predictVitals(
+  payload: Record<string, unknown>,
+): Promise<PredictionResult> {
   return request<PredictionResult>('/predict', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -73,7 +75,5 @@ export function predictVitals(payload: Record<string, unknown>): Promise<Predict
 }
 
 export function getPatientHistory(patientId: string): Promise<unknown> {
-  return request<unknown>(
-    `/patient/${encodeURIComponent(patientId)}/history`,
-  );
+  return request<unknown>(`/patient/${encodeURIComponent(patientId)}/history`);
 }

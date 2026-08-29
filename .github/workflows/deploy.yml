@@ -69,7 +69,7 @@ on:
   push:
     branches-ignore: [main]
     tags:
-      - "v*"
+      - 'v*'
   workflow_dispatch:
 
 concurrency:
@@ -77,18 +77,18 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: "20"
-  PYTHON_VERSION: "3.12"
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE20: "true"
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE20: 'true'
   # GitHub Pages deployment settings
-  SITE_URL: "https://YOUR_USERNAME.github.io/hospital-platform"
-  SITE_ORIGIN: "https://YOUR_USERNAME.github.io"
-  BASE_PATH: "/"
+  SITE_URL: 'https://YOUR_USERNAME.github.io/hospital-platform'
+  SITE_ORIGIN: 'https://YOUR_USERNAME.github.io'
+  BASE_PATH: '/'
   # Frontend build output directory
-  FRONTEND_DIST: "apps/frontend/dist"
+  FRONTEND_DIST: 'apps/frontend/dist'
   # Docker image registry (for on-premise registry or GHCR)
-  REGISTRY: "ghcr.io"
-  IMAGE_NAME: "${{ github.repository }}"
+  REGISTRY: 'ghcr.io'
+  IMAGE_NAME: '${{ github.repository }}'
   # Version handling - tag extracted early with SHA fallback
   APP_VERSION: ${{ github.ref_name || github.sha }}
 
@@ -96,7 +96,7 @@ permissions:
   contents: read
   packages: read
   security-events: write
-  pages: write  # Required for GitHub Pages deployment
+  pages: write # Required for GitHub Pages deployment
   actions: read
 
 jobs:
@@ -121,7 +121,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
@@ -184,7 +184,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
@@ -219,7 +219,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
@@ -236,7 +236,7 @@ jobs:
           VITE_BASE_PATH: ${{ env.BASE_PATH }}
 
       - name: Build FastAPI ML Workers (if present)
-        if: false  # Set true when ml-workers app is added
+        if: false # Set true when ml-workers app is added
         run: |
           echo "ML Workers build skipped - add when ml-workers app is configured"
           # cd ml-workers && pip install -e . || true
@@ -265,7 +265,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: 'npm'
 
       - name: Run npm audit
         run: npm audit --audit-level=high || echo "::warning::Security vulnerabilities found - please review"
@@ -359,10 +359,10 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:${{ env.APP_VERSION }}
-          format: "sarif"
-          output: "trivy.sarif"
+          format: 'sarif'
+          output: 'trivy.sarif'
           ignore-unfixed: false
-          severities: "critical,high"
+          severities: 'critical,high'
 
       - name: Upload Trivy SARIF to Code Scanning
         if: vars.ENABLE_CODE_SCANNING_SARIF == 'true' && always() && hashFiles('trivy.sarif') != ''
@@ -374,8 +374,8 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:${{ env.APP_VERSION }}
-          format: "json"
-          output: "trivy-results.json"
+          format: 'json'
+          output: 'trivy-results.json'
 
       - name: Upload Trivy report artifact
         if: always() && hashFiles('trivy-results.json') != ''
@@ -396,7 +396,7 @@ jobs:
     permissions:
       contents: write
       actions: read
-      pages: write  # Pages only on main or tags
+      pages: write # Pages only on main or tags
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -419,7 +419,7 @@ jobs:
           echo "🔍 Setting up GitHub Pages deployment"
           echo "APP_VERSION: $APP_VERSION"
           echo "GITHUB_REF: $GITHUB_REF"
-          
+
       - name: Generate _redirects and _headers for GitHub Pages
         run: |
           mkdir -p ./frontend-build
@@ -489,7 +489,8 @@ jobs:
     name: CI Summary & Reports
     runs-on: ubuntu-latest
     if: always()
-    needs: [lint-quality, unit-tests, build-artifacts, security-scan, docker-build]
+    needs:
+      [lint-quality, unit-tests, build-artifacts, security-scan, docker-build]
     permissions:
       contents: read
       actions: read

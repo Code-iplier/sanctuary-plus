@@ -17,11 +17,6 @@
     "skipLibCheck": true,
     "strict": true
   },
-  "include": [
-    "backend/src/**/*.ts"
-  ],
-  "exclude": [
-    "**/*.spec.ts",
-    "**/*.test.ts"
-  ]
+  "include": ["backend/src/**/*.ts"],
+  "exclude": ["**/*.spec.ts", "**/*.test.ts"]
 }

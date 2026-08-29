@@ -4,3 +4,7 @@
 /.nx/cache
 /.nx/workspace-data
 .nx/self-healing
+
+# Generated / non-source artifacts (reformatting causes churn)
+/package-lock.json
+apps/chronos/models/

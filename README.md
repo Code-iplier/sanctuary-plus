@@ -11,7 +11,7 @@
 
 **Hospital Platform** is a hackathon project for the problem statement:
 
-> *"An AI-powered healthcare platform for reducing hospital overcrowding and improving patient safety through smart digital queues, automated clinical documentation, medication reconciliation, and preventive disease-risk assessment."*
+> _"An AI-powered healthcare platform for reducing hospital overcrowding and improving patient safety through smart digital queues, automated clinical documentation, medication reconciliation, and preventive disease-risk assessment."_
 
 [Project Chronos](https://github.com/anomalyco/chronos) (ICU Early Warning System) is **fully embedded** as a first-class feature module in the same monorepo. The hospital platform calls the local FastAPI Chronos runtime on port 8000 via the NestJS "Chronos Bridge". All 3 trained ML models (sepsis, hypotension, hemodynamic_collapse) are present; inference logic is bootstrapped with demo scoring and ready for production model loading.
 
@@ -45,13 +45,13 @@
 
 ## Features & Implementation Status
 
-| Feature | Status | Backend | UI | Description |
-|---------|--------|---------|----|-----------
-| **Chronos (ICU Early Warning)** | 🟢 95% | ✅ Full | ✅ Full | 4-engine ML ensemble (LGBM/XGBoost/meta-stacker/calibrator) fully embedded; **real trained model artifacts loaded and scoring**; feature engineering + risk stratification working end-to-end |
-| **Smart Digital Queues** | 🔴 5% | ❌ None | ✅ UI only | ESI triage, bed assignment, acuity scoring — UI mockups complete; backend API & database pending |
-| **Clinical Documentation** | 🔴 5% | ❌ None | ✅ UI only | TipTap editor, FHIR mapping — UI placeholder; storage, NLP extraction pending |
-| **Medication Reconciliation** | 🔴 5% | ❌ None | ✅ UI only | Drug interaction & allergy checks — UI only; RxNorm/DrugBank integration pending |
-| **Risk Assessment** | 🔴 10% | ❌ None | ✅ UI only | ASCVD/KDIGO/LACE calculators — mock values; backend endpoint & ML model pending |
+| Feature                         | Status | Backend | UI         | Description                                                                                                                                                                                   |
+| ------------------------------- | ------ | ------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Chronos (ICU Early Warning)** | 🟢 95% | ✅ Full | ✅ Full    | 4-engine ML ensemble (LGBM/XGBoost/meta-stacker/calibrator) fully embedded; **real trained model artifacts loaded and scoring**; feature engineering + risk stratification working end-to-end |
+| **Smart Digital Queues**        | 🔴 5%  | ❌ None | ✅ UI only | ESI triage, bed assignment, acuity scoring — UI mockups complete; backend API & database pending                                                                                              |
+| **Clinical Documentation**      | 🔴 5%  | ❌ None | ✅ UI only | TipTap editor, FHIR mapping — UI placeholder; storage, NLP extraction pending                                                                                                                 |
+| **Medication Reconciliation**   | 🔴 5%  | ❌ None | ✅ UI only | Drug interaction & allergy checks — UI only; RxNorm/DrugBank integration pending                                                                                                              |
+| **Risk Assessment**             | 🔴 10% | ❌ None | ✅ UI only | ASCVD/KDIGO/LACE calculators — mock values; backend endpoint & ML model pending                                                                                                               |
 
 **Overall Compliance: ~35%** — Chronos is production-ready for ICU safety with real model inference; other features are proof-of-concept UIs awaiting backend implementation.
 
@@ -64,6 +64,7 @@ UI is built with **Hero UI v3** (`@heroui/react@^3.2.4`), which is built on Reac
 Components used: `Card`, `Badge`, `Button`, `Tabs` (`Tabs.List` / `Tabs.Tab` / `Tabs.Panel`), `Input`, `Alert`, `ProgressBar`, `Avatar`, `Drawer` (`Drawer.Trigger` / `Drawer.Content` / `Drawer.Header` / `Drawer.Body`), and `Toast` (`Toast.Provider`). Icons come from **`lucide-react`**.
 
 **Styling/entry setup (critical for the app to render):**
+
 - `apps/frontend/index.html` — Vite entry; loads `/src/main.tsx` into `#root` (without it the page is blank).
 - `apps/frontend/vite.config.ts` — `@vitejs/plugin-react` + `@tailwindcss/vite`.
 - `apps/frontend/src/styles/global.css` — starts with `@import "tailwindcss";` then `@import "@heroui/styles";` (this injects all Hero UI styles). Custom CSS follows.
@@ -130,11 +131,11 @@ The embedded **Chronos ICU Early Warning** system is a fully functional FastAPI 
 
 All three model registries load successfully at startup from the `apps/chronos/models/` directory:
 
-| Target | Status | Artifacts |
-|--------|--------|-----------|
-| **Sepsis** | ✅ Loaded | lgbm_model.pkl, xgb_model.pkl, meta_stacker.pkl, isotonic_calibrator.pkl, feature_columns.json, model_metadata.json |
-| **Hypotension** | ✅ Loaded | (same structure) |
-| **Hemodynamic Collapse** | ✅ Loaded | (same structure) |
+| Target                   | Status    | Artifacts                                                                                                           |
+| ------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Sepsis**               | ✅ Loaded | lgbm_model.pkl, xgb_model.pkl, meta_stacker.pkl, isotonic_calibrator.pkl, feature_columns.json, model_metadata.json |
+| **Hypotension**          | ✅ Loaded | (same structure)                                                                                                    |
+| **Hemodynamic Collapse** | ✅ Loaded | (same structure)                                                                                                    |
 
 ### Inference Pipeline
 
@@ -157,6 +158,7 @@ The `/predict` endpoint uses a **4-stage ensemble scoring strategy**:
 **POST `/api/chronos/predict`**
 
 Request:
+
 ```json
 {
   "patient_id": "ICU-001",
@@ -176,6 +178,7 @@ Request:
 ```
 
 Response:
+
 ```json
 {
   "patient_id": "ICU-001",
@@ -231,20 +234,20 @@ NestJS Backend (adapts response)
 
 ### Frontend (`apps/frontend/`)
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Vite dev server (port 5173) |
-| `npm run build` | Production build via Vite |
+| Script            | Description                  |
+| ----------------- | ---------------------------- |
+| `npm run dev`     | Vite dev server (port 5173)  |
+| `npm run build`   | Production build via Vite    |
 | `npm run preview` | Preview the production build |
 
 ### Backend (`apps/backend/`)
 
-| Script | Description |
-|--------|-------------|
+| Script              | Description                      |
+| ------------------- | -------------------------------- |
 | `npm run start:dev` | NestJS in watch mode (port 3000) |
-| `npm run build` | Build the NestJS app |
-| `npm run test` | Vitest unit tests |
-| `npm run lint` | ESLint |
+| `npm run build`     | Build the NestJS app             |
+| `npm run test`      | Vitest unit tests                |
+| `npm run lint`      | ESLint                           |
 
 ### Nx Workspace (root)
 
@@ -313,19 +316,22 @@ The frontend was written against the real Hero UI v3 API (verified from `@heroui
 To achieve full compliance with the problem statement:
 
 ### Phase 1: Chronos Production Ready (Current ✅)
+
 - ✅ Embed Chronos service in monorepo
 - ✅ Load pre-trained ML models (sepsis, hypotension, hemodynamic_collapse)
 - 🔄 **Next**: Port real model inference logic (load `.pkl` / `.pt` files, run ensemble, apply calibration)
 
 ### Phase 2: Backend Modules (Priority Order)
+
 1. **Risk Service** (ASCVD/KDIGO/LACE calculators) — standalone, high ROI, no DB deps
 2. **Queue Service** (ESI triage, bed assignment) — depends on patient database
 3. **Documentation Service** (note storage, FHIR mapping) — depends on patient database
 4. **Medications Service** (DDI checking, allergy cross-reference) — depends on drug database
 
 ### Phase 3: Data Layer
+
 - PostgreSQL schema for patients, admissions, vitals, notes, medications
-- Redis cache for real-time patient status  
+- Redis cache for real-time patient status
 - HIPAA-compliant encryption at rest + audit logging
 
 ---
@@ -348,16 +354,16 @@ npx eslint "apps/frontend/src/**/*.{ts,tsx}"
 
 A 6-stage GitHub Actions pipeline. Stages 1–3 run on every PR / push / tag; deploy stages run on `main` or `v*` tags.
 
-| Stage | Job | What it does |
-|-------|-----|--------------|
-| 1 | `lint-quality` | `npx nx typecheck`, `npx nx format:check`, `npx nx lint` — fails on errors |
-| 1 | `unit-tests` | `npx nx test` (Vitest) |
-| 2 | `build-artifacts` | `npx nx build backend`, `npx nx build frontend`, Chronos validation |
-| 2B | `security-scan` | `npm audit --audit-level=high` |
-| 3 | `docker-build` | Backend Docker image build + push to GHCR (main/tags only) |
-| 4 | `trivy-scan` | Image vulnerability scan (tags only) |
-| 5 | `deploy` | Frontend GitHub Pages + backend verification (main/tags, optional) |
-| 6 | `ci-summary` | Build summary report |
+| Stage | Job               | What it does                                                               |
+| ----- | ----------------- | -------------------------------------------------------------------------- |
+| 1     | `lint-quality`    | `npx nx typecheck`, `npx nx format:check`, `npx nx lint` — fails on errors |
+| 1     | `unit-tests`      | `npx nx test` (Vitest)                                                     |
+| 2     | `build-artifacts` | `npx nx build backend`, `npx nx build frontend`, Chronos validation        |
+| 2B    | `security-scan`   | `npm audit --audit-level=high`                                             |
+| 3     | `docker-build`    | Backend Docker image build + push to GHCR (main/tags only)                 |
+| 4     | `trivy-scan`      | Image vulnerability scan (tags only)                                       |
+| 5     | `deploy`          | Frontend GitHub Pages + backend verification (main/tags, optional)         |
+| 6     | `ci-summary`      | Build summary report                                                       |
 
 **Triggers:** `pull_request` (all branches), `push` (all branches), `tags: v*`, `workflow_dispatch`.
 
@@ -366,8 +372,9 @@ A 6-stage GitHub Actions pipeline. Stages 1–3 run on every PR / push / tag; de
 ### CI/CD Status
 
 ✅ **Pipeline is production-ready:**
+
 - `lint-quality` — TypeScript, Prettier, ESLint (0 errors)
-- `unit-tests` — Vitest suite (0 errors)  
+- `unit-tests` — Vitest suite (0 errors)
 - `build-artifacts` — Frontend (Vite) + Backend (NestJS) + Chronos (Python) (0 errors)
 - `security-scan` — npm audit (0 high-severity issues)
 - `docker-build` — Backend image (main/tags only)
@@ -375,6 +382,7 @@ A 6-stage GitHub Actions pipeline. Stages 1–3 run on every PR / push / tag; de
 - `ci-summary` — Build report
 
 **Notes:**
+
 - GitHub Pages serves only the static React frontend; NestJS backend deploys via Docker to GHCR / VPS.
 - `BASE_PATH` defaults to `/`; set `VITE_BASE_PATH` for sub-path hosting.
 - HIPAA posture: on-premise / air-gapped friendly — no cloud egress for patient data.
@@ -382,11 +390,13 @@ A 6-stage GitHub Actions pipeline. Stages 1–3 run on every PR / push / tag; de
 ## ML vs Rule-Based Design Rationale
 
 **Rules** for auditable, deterministic clinical logic:
+
 - **Queues** — ESI triage is standardized, protocol-driven, reproducible.
 - **Medications** — RxNorm/DrugBank DDI + allergy checks are knowledge-base lookups (not learned).
 - **Documentation** — structured data → FHIR mapping is rule-based for audit trail & compliance.
 
 **ML** where it adds value:
+
 - **Chronos** (✅ **Production-Ready**) — the platform's key differentiator; 4-engine ensemble already trained on MIMIC-IV.
 - **Risk** (🔄 **Planned**) — LightGBM readmission risk augments ASCVD/KDIGO/LACE clinical calculators.
 - **Documentation NLP** (🔄 **Future**) — ClinicalBERT entity extraction + Whisper transcription for semi-automated notes.

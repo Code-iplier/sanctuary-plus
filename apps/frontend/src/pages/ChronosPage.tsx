@@ -53,9 +53,7 @@ function riskColor(level: string): 'danger' | 'warning' | 'accent' | 'success' {
   return 'success';
 }
 
-function overallRisk(
-  alerts: Record<string, { risk_level: string }>,
-): string {
+function overallRisk(alerts: Record<string, { risk_level: string }>): string {
   let top = 'LOW';
   for (const a of Object.values(alerts)) {
     if (RISK_RANK[a.risk_level] > RISK_RANK[top]) top = a.risk_level;
@@ -220,7 +218,8 @@ export default function ChronosPage() {
       setSummary(data);
       setError(null);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unable to reach Chronos';
+      const msg =
+        err instanceof Error ? err.message : 'Unable to reach Chronos';
       setError(msg);
       Toast.toast.danger(msg);
     } finally {
@@ -358,16 +357,12 @@ export default function ChronosPage() {
               <Field
                 label="Patient ID"
                 value={testVitals.patientId}
-                onChange={(v) =>
-                  setTestVitals({ ...testVitals, patientId: v })
-                }
+                onChange={(v) => setTestVitals({ ...testVitals, patientId: v })}
               />
               <Field
                 label="Heart Rate (bpm)"
                 value={testVitals.heartRate}
-                onChange={(v) =>
-                  setTestVitals({ ...testVitals, heartRate: v })
-                }
+                onChange={(v) => setTestVitals({ ...testVitals, heartRate: v })}
               />
               <Field
                 label="Systolic BP (mmHg)"
@@ -412,9 +407,7 @@ export default function ChronosPage() {
               <Field
                 label="Lactate (mmol/L)"
                 value={testVitals.lactate}
-                onChange={(v) =>
-                  setTestVitals({ ...testVitals, lactate: v })
-                }
+                onChange={(v) => setTestVitals({ ...testVitals, lactate: v })}
               />
               <Field
                 label="WBC (10³/µL)"
@@ -431,16 +424,12 @@ export default function ChronosPage() {
               <Field
                 label="Bilirubin (mg/dL)"
                 value={testVitals.bilirubin}
-                onChange={(v) =>
-                  setTestVitals({ ...testVitals, bilirubin: v })
-                }
+                onChange={(v) => setTestVitals({ ...testVitals, bilirubin: v })}
               />
               <Field
                 label="Platelets (10³/µL)"
                 value={testVitals.platelets}
-                onChange={(v) =>
-                  setTestVitals({ ...testVitals, platelets: v })
-                }
+                onChange={(v) => setTestVitals({ ...testVitals, platelets: v })}
               />
               <Field
                 label="FiO₂"
@@ -492,9 +481,7 @@ export default function ChronosPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-medium capitalize">{model}</p>
-                        <p className="text-xs text-gray-600">
-                          {result.source}
-                        </p>
+                        <p className="text-xs text-gray-600">{result.source}</p>
                       </div>
                       <div className="text-right">
                         <Badge
@@ -532,8 +519,8 @@ export default function ChronosPage() {
             {monitored.length === 0 ? (
               <Card className="p-4 text-sm text-gray-500">
                 No monitored patients yet. Run a prediction in the{' '}
-                <span className="font-medium">Test Models</span> tab and it
-                will appear here with live Chronos risk scores.
+                <span className="font-medium">Test Models</span> tab and it will
+                appear here with live Chronos risk scores.
               </Card>
             ) : (
               <>
@@ -566,7 +553,9 @@ export default function ChronosPage() {
                             {model}
                           </span>
                           <span className="inline-flex items-center gap-2">
-                            <span>{(result.probability * 100).toFixed(0)}%</span>
+                            <span>
+                              {(result.probability * 100).toFixed(0)}%
+                            </span>
                             <Badge
                               color={riskColor(result.risk_level)}
                               variant="soft"

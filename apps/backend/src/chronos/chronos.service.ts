@@ -27,18 +27,14 @@ export class ChronosBridgeService {
 
   async getSummary() {
     const [health, patients] = await Promise.all([
-      this.getHealth().catch(
-        (): ChronosHealth => ({
-          status: 'offline',
-          models_loaded: [],
-        }),
-      ),
-      this.getPatients().catch(
-        (): ChronosPatients => ({
-          count: 0,
-          active_patients: [],
-        }),
-      ),
+      this.getHealth().catch((): ChronosHealth => ({
+        status: 'offline',
+        models_loaded: [],
+      })),
+      this.getPatients().catch((): ChronosPatients => ({
+        count: 0,
+        active_patients: [],
+      })),
     ]);
 
     const typedHealth = health as ChronosHealth;
@@ -47,7 +43,9 @@ export class ChronosBridgeService {
     return {
       status: typedHealth.status || 'offline',
       models_loaded: typedHealth.models_loaded || [],
-      active_patients: Number(typedHealth.active_patients ?? typedPatients.count ?? 0),
+      active_patients: Number(
+        typedHealth.active_patients ?? typedPatients.count ?? 0,
+      ),
       patient_count: Number(typedPatients.count ?? 0),
       source: this.baseUrl,
       route: '/api/chronos',
