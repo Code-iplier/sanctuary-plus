@@ -323,9 +323,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args:
-            - NODE_VERSION=${{ env.NODE_VERSION }}
-            - BASE_PATH=${{ env.BASE_PATH }}
+          build-args: |
+            NODE_VERSION=${{ env.NODE_VERSION }}
+            BASE_PATH=${{ env.BASE_PATH }}
 
       - name: Print backend build info
         if: always()
