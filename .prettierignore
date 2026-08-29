@@ -8,3 +8,15 @@
 # Generated / non-source artifacts (reformatting causes churn)
 /package-lock.json
 apps/chronos/models/
+
+# Build / runtime artifacts
+*.tsbuildinfo
+*.log
+__pycache__/
+*.pyc
+*.pkl
+*.pt
+
+# Python virtual environments (huge, never format)
+.venv/
+venv/

@@ -5,6 +5,13 @@ dist
 tmp
 out-tsc
 
+# TypeScript build info
+*.tsbuildinfo
+
+# Python virtual environments
+.venv/
+venv/
+
 # Stray TypeScript emit artifacts accidentally placed in src/ (Vite builds to dist/)
 apps/frontend/src/**/*.js
 apps/frontend/src/**/*.d.ts

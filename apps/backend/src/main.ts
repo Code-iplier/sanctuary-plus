@@ -7,7 +7,9 @@ async function bootstrap() {
   app.setGlobalPrefix(globalPrefix);
   const port = process.env.PORT || 3000;
   await app.listen(port);
-  console.log(`🚀 Hospital Backend API running on: http://localhost:${port}/${globalPrefix}`);
+  console.log(
+    `🚀 Hospital Backend API running on: http://localhost:${port}/${globalPrefix}`,
+  );
 }
 
 bootstrap();
