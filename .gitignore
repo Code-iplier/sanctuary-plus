@@ -5,6 +5,12 @@ dist
 tmp
 out-tsc
 
+# Stray TypeScript emit artifacts accidentally placed in src/ (Vite builds to dist/)
+apps/frontend/src/**/*.js
+apps/frontend/src/**/*.d.ts
+apps/frontend/src/**/*.d.ts.map
+!apps/frontend/src/vite-env.d.ts
+
 # dependencies
 node_modules
 

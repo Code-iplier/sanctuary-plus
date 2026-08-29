@@ -1,0 +1,13 @@
+{
+  "name": "@org/chronos-frontend",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/frontend",
+        "command": "tsc --noEmit"
+      }
+    }
+  }
+}

@@ -70,6 +70,8 @@ Components used: `Card`, `Badge`, `Button`, `Tabs` (`Tabs.List` / `Tabs.Tab` / `
 - No `tailwind.config.{js,cjs}` / `postcss.config` is needed (Tailwind v4 is CSS-first).
 - There is **no** `HeroUIProvider` wrapper in v3 — `main.tsx` just imports `./styles/global.css` and renders `<App />`.
 
+**Chronos data layer:** The Chronos feature talks to the backend through a small typed client at `apps/frontend/src/api/chronos.ts` (`getChronosSummary`, `getPatients`, `predictVitals`, `getPatientHistory`). The base URL is read from `import.meta.env.VITE_API_BASE_URL` and defaults to same-origin, and `apps/frontend/vite.config.ts` proxies `/api` → `http://localhost:3000` in dev — so there are no hardcoded hosts and no CORS setup is needed.
+
 **Tooling compatibility (important):** Vite is pinned to **v6** and `@vitejs/plugin-react` to **v4**. `@vitejs/plugin-react@6` only works with Vite 8 (Rolldown-based), and Vite 8's dev server crashes with `Missing field 'moduleType'` from the React-refresh wrapper. So do **not** upgrade Vite to 7/8 or `@vitejs/plugin-react` to 5/6 — keep the v6 + plugin-react@4 pairing.
 
 ## Quick Start
@@ -218,8 +220,12 @@ FastAPI Chronos (port 8000)
   ↑ Returns predictions with risk levels & confidence scores
 NestJS Backend (adapts response)
   ↑ Returns to frontend
-Frontend (displays alerts & clinical insights)
+  Frontend (displays alerts & clinical insights)
 ```
+
+### Frontend (`ChronosPage`)
+
+`apps/frontend/src/pages/ChronosPage.tsx` is fully wired to the live API. The **Test Models** tab exposes an expanded vitals/labs input form (hemodynamics, ventilation, labs, neuro/support) and calls `POST /api/chronos/predict`; the response renders per-target probability, a risk-level badge, and a `ProgressBar`. Each prediction is added to the **Alerts** tab as a monitored patient (persisted in `localStorage`) showing an overall risk level and a per-target breakdown. Errors surface through the HeroUI `Toast` provider (not `window.alert()`), and the predict button shows a loading state. The previously hardcoded mock alert list has been removed.
 
 ## Available Scripts
 
@@ -336,6 +342,7 @@ npx eslint "apps/frontend/src/**/*.{ts,tsx}"
 
 - `lucide-react` is installed with `--legacy-peer-deps`.
 - `src/vite-env.d.ts` declares `vite/client` so CSS side-effect imports type-check.
+- `apps/frontend/project.json` overrides the `typecheck` target to run `tsc --noEmit` (and `apps/frontend/tsconfig.json` no longer sets `composite`), so `npx nx typecheck @org/chronos-frontend` type-checks without emitting stray `.js`/`.d.ts` files into `src/`. Any such artifacts are also git-ignored.
 
 ## CI/CD Workflow (`.github/workflows/deploy.yml`)
 
