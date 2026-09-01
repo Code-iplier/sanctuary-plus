@@ -1,0 +1,15 @@
+/* Chronos domain styles — scoped under .chronos-root. No global :root overwrites. */
+.chronos-root {
+  --chronos-accent: var(--hero-color-primary);
+}
+
+.chronos-root .chronos-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 1024px) {
+  .chronos-root .chronos-layout {
+    grid-template-columns: 1fr 360px;
+  }
+}
