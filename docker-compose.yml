@@ -1,0 +1,63 @@
+services:
+  chronos:
+    build:
+      context: ./services/chronos
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
+    environment:
+      PORT: 8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=5).read() else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - sanctuary
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    expose:
+      - "3000"
+    environment:
+      PORT: 3000
+      CHRONOS_BASE_URL: http://chronos:8000
+      NODE_ENV: production
+    depends_on:
+      chronos:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/chronos/summary"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - sanctuary
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sanctuary
+    restart: unless-stopped
+
+networks:
+  sanctuary:
+    driver: bridge
