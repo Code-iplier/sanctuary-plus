@@ -1,4 +1,4 @@
-# Hospital Platform — AI-Powered Healthcare System
+# Sanctuary+ — AI-Powered Healthcare System
 
 ![React](https://img.shields.io/badge/React-19.0-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C7?logo=typescript&logoColor=white)
@@ -9,7 +9,7 @@
 
 ## Project Overview
 
-**Hospital Platform** is a hackathon project for the problem statement:
+**Sanctuary+** is a hackathon project for the problem statement:
 
 > *"An AI-powered healthcare platform for reducing hospital overcrowding and improving patient safety through smart digital queues, automated clinical documentation, medication reconciliation, and preventive disease-risk assessment."*
 
@@ -79,7 +79,7 @@ Components used: `Card`, `Badge`, `Button`, `Tabs` (`Tabs.List` / `Tabs.Tab` / `
 ```bash
 # Clone
 git clone <your-fork-url>
-cd hospital-platform
+cd sanctuary-plus
 
 # Install workspace dependencies.
 # The workspace has a pre-existing NestJS 11/12 peer-dep conflict, so
@@ -150,7 +150,7 @@ npx nx graph                  # project graph
 ## Project Structure
 
 ```
-hospital-platform/
+sanctuary-plus/
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml          # CI/CD pipeline (lint → test → build → docker → deploy)
