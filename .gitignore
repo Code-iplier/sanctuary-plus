@@ -57,3 +57,15 @@ test-output
 # Claude code worktrees
 .claude/worktrees
 .claude/settings.local.json
+# Chronos runtime (Python) — generated/runtime files excluded; source models remain tracked
+services/chronos/.venv/
+services/chronos/**/__pycache__/
+services/chronos/**/*.py[cod]
+services/chronos/logs/
+services/chronos/data/
+services/chronos/**/.pytest_cache/
+services/chronos/**/_features_cache_*.parquet
+services/chronos/models/*/checkpoints/
+services/chronos/models/*/model_metadata_prev.json
+# TypeScript build info
+*.tsbuildinfo
