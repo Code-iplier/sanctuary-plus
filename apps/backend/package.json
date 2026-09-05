@@ -28,10 +28,18 @@
       }
     }
   },
+  "scripts": {
+    "start": "node dist/main.js",
+    "start:dev": "ts-node -P tsconfig.runtime.json src/main.ts",
+    "build": "tsc -p tsconfig.runtime.json",
+    "typecheck": "tsc --noEmit -p tsconfig.runtime.json",
+    "test": "vitest"
+  },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
     "@nestjs/core": "^12.0.1",
     "@nestjs/platform-express": "^12.0.1",
+    "@nestjs/platform-socket.io": "^12.0.1",
     "@nestjs/config": "^12.0.0",
     "@nestjs/jwt": "^12.0.1",
     "@nestjs/passport": "^12.0.0",
@@ -39,6 +47,7 @@
     "@nestjs/websockets": "^12.0.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "socket.io": "^4.8.1",
     "tslib": "^2.3.0"
   },
   "devDependencies": {

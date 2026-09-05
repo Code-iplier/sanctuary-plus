@@ -25,6 +25,7 @@
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.86.0",
+    "socket.io-client": "^4.8.1",
     "zod": "^4.5.2"
   },
   "devDependencies": {
