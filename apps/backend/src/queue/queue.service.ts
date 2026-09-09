@@ -1,202 +1,104 @@
-import { Injectable } from '@nestjs/common';
-import { activeQueueEntries, createInitialState, pushEvent, recalculateState, sortQueueEntries, tokenLabel } from './queue.store';
-import type { DemoState, Doctor, Patient, Priority, QueueEntry } from './queue.types';
-
-export interface RegisterPatientInput {
-  name: string;
-  phone: string;
-  age?: string;
-  gender?: string;
-  hospitalId: string;
-}
-
-export interface JoinQueueInput {
-  patientId: string;
-  doctorId: string;
-  priority: Priority;
-  visitType: string;
-  reason?: string;
-}
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { QueueStore } from './queue.store';
+import {
+  PatientTicket,
+  QueueSnapshot,
+  TriageLevel,
+  DoctorAvailability,
+  RoomStatus,
+  VisitType,
+  DoctorProfile,
+  DoctorRoom,
+} from './queue.types';
 
 @Injectable()
 export class QueueService {
-  private readonly state: DemoState = createInitialState();
+  constructor(private readonly store: QueueStore) {}
 
-  snapshot(): DemoState {
-    recalculateState(this.state);
-    return structuredClone(this.state);
+  public snapshot(): QueueSnapshot {
+    return this.store.getSnapshot();
   }
 
-  hospitals() {
-    return this.state.hospitals;
-  }
-
-  departments(hospitalId: string) {
-    return this.state.departments.filter((d) => d.hospitalId === hospitalId);
-  }
-
-  doctors(departmentId?: string) {
-    return departmentId ? this.state.doctors.filter((d) => d.departmentId === departmentId) : this.state.doctors;
-  }
-
-  getDoctor(id: string): Doctor | null {
-    return this.state.doctors.find((d) => d.id === id) ?? null;
-  }
-
-  getPatientByPhone(phone: string): Patient | null {
-    return this.state.patients.find((p) => p.phone === phone) ?? null;
-  }
-
-  getQueueById(id: string): QueueEntry | null {
-    return this.state.queues.find((q) => q.id === id) ?? null;
-  }
-
-  getActiveQueueForDoctor(doctorId: string): QueueEntry[] {
-    return activeQueueEntries(this.state, doctorId);
-  }
-
-  getQueuesForPatient(patientId: string): QueueEntry[] {
-    return sortQueueEntries(this.state.queues.filter((q) => q.patientId === patientId));
-  }
-
-  registerPatient(input: RegisterPatientInput): Patient {
-    const existing = this.getPatientByPhone(input.phone);
-    if (existing) {
-      existing.name = input.name;
-      if (input.age) existing.age = input.age;
-      if (input.gender) existing.gender = input.gender;
-      existing.hospitalId = input.hospitalId;
-      return existing;
+  public issueTicket(input: {
+    patientId: string;
+    patientName: string;
+    patientPhone: string;
+    departmentId: string;
+    visitType: VisitType;
+    reason: string;
+  }): PatientTicket {
+    if (!input.patientId || !input.departmentId) {
+      throw new BadRequestException('Patient ID and Department ID are required.');
     }
-    const patient: Patient = {
-      id: `p${this.state.nextIds.patient++}`,
-      name: input.name,
-      phone: input.phone,
-      hospitalId: input.hospitalId,
-      age: input.age,
-      gender: input.gender,
-    };
-    this.state.patients.push(patient);
-    pushEvent(this.state, 'PATIENT_REGISTERED', `${input.name} registered`);
-    return patient;
+    return this.store.issueTicket(input);
   }
 
-  joinQueue(input: JoinQueueInput): QueueEntry | null {
-    const doctor = this.getDoctor(input.doctorId);
-    const patient = this.state.patients.find((p) => p.id === input.patientId) ?? null;
-    if (!doctor || !patient) return null;
-    if (doctor.availabilityStatus === 'UNAVAILABLE') return null;
-    const existing = this.state.queues.find(
-      (e) =>
-        e.patientId === patient.id &&
-        e.doctorId === doctor.id &&
-        ['WAITING', 'NOTIFIED', 'CALLED', 'IN_CONSULTATION'].includes(e.status),
+  public triageTicket(
+    ticketId: string,
+    input: {
+      triageLevel: TriageLevel;
+      vitals?: { bp?: string; pulse?: string; temp?: string; spo2?: string };
+      triageNotes?: string;
+      actor?: string;
+    }
+  ): PatientTicket {
+    return this.store.triageTicket(
+      ticketId,
+      input.triageLevel,
+      input.vitals,
+      input.triageNotes,
+      input.actor
     );
-    if (existing) return existing;
-    const n = this.state.nextIds.token++;
-    const entry: QueueEntry = {
-      id: `q${this.state.nextIds.queue++}`,
-      patientId: patient.id,
-      doctorId: doctor.id,
-      priority: 'NORMAL',
-      status: 'WAITING',
-      tokenNumber: n,
-      tokenLabel: tokenLabel(n),
-      joinedAt: new Date().toISOString(),
-      visitType: input.visitType,
-      reason: input.reason,
-    };
-    this.state.queues.push(entry);
-    pushEvent(this.state, 'QUEUE_JOINED', `${patient.name} joined ${doctor.name}`);
-    return entry;
   }
 
-  callPatient(doctorId: string): QueueEntry | null {
-    const doctor = this.getDoctor(doctorId);
-    if (!doctor) return null;
-    const next = sortQueueEntries(
-      this.state.queues.filter((e) => e.doctorId === doctorId && (e.status === 'WAITING' || e.status === 'NOTIFIED')),
-    )[0];
-    if (!next) return null;
-    next.status = 'CALLED';
-    next.calledAt = new Date().toISOString();
-    next.roomNumber = doctor.roomNumber;
-    pushEvent(this.state, 'PATIENT_CALLED', `${doctor.name} called ${next.tokenLabel}`);
-    return next;
+  public callNext(roomId: string, actor?: string): PatientTicket {
+    return this.store.callNext(roomId, actor);
   }
 
-  startConsultation(doctorId: string): QueueEntry | null {
-    const doctor = this.getDoctor(doctorId);
-    if (!doctor) return null;
-    const cur = this.state.queues.find((e) => e.doctorId === doctorId && e.status === 'IN_CONSULTATION');
-    if (cur) return cur;
-    const next = sortQueueEntries(
-      this.state.queues.filter((e) => e.doctorId === doctorId && (e.status === 'CALLED' || e.status === 'WAITING' || e.status === 'NOTIFIED')),
-    )[0];
-    if (!next) return null;
-    next.status = 'IN_CONSULTATION';
-    next.consultationStartedAt = new Date().toISOString();
-    next.roomNumber = next.roomNumber ?? doctor.roomNumber;
-    pushEvent(this.state, 'CONSULTATION_STARTED', `${doctor.name} started ${next.tokenLabel}`);
-    return next;
+  public startConsultation(roomId: string, actor?: string): PatientTicket {
+    return this.store.startConsultation(roomId, actor);
   }
 
-  completeConsultation(doctorId: string): QueueEntry | null {
-    const doctor = this.getDoctor(doctorId);
-    if (!doctor) return null;
-    const cur = this.state.queues.find((e) => e.doctorId === doctorId && e.status === 'IN_CONSULTATION');
-    if (!cur) return null;
-    cur.status = 'COMPLETED';
-    cur.consultationCompletedAt = new Date().toISOString();
-    pushEvent(this.state, 'CONSULTATION_COMPLETED', `${doctor.name} completed ${cur.tokenLabel}`);
-    return cur;
+  public finishConsultation(roomId: string, notes?: string, actor?: string): PatientTicket {
+    return this.store.finishConsultation(roomId, notes, actor);
   }
 
-  skipPatient(doctorId: string): QueueEntry | null {
-    const doctor = this.getDoctor(doctorId);
-    if (!doctor) return null;
-    const target = sortQueueEntries(
-      this.state.queues.filter((e) => e.doctorId === doctorId && (e.status === 'WAITING' || e.status === 'NOTIFIED' || e.status === 'CALLED')),
-    )[0];
-    if (!target) return null;
-    target.status = 'SKIPPED';
-    pushEvent(this.state, 'PATIENT_SKIPPED', `${target.tokenLabel} skipped`);
-    return target;
+  public markNoShow(roomId: string, reason?: string, actor?: string): PatientTicket {
+    return this.store.markNoShow(roomId, reason, actor);
   }
 
-  markNoShow(doctorId: string): QueueEntry | null {
-    const doctor = this.getDoctor(doctorId);
-    if (!doctor) return null;
-    const target = sortQueueEntries(
-      this.state.queues.filter((e) => e.doctorId === doctorId && (e.status === 'WAITING' || e.status === 'NOTIFIED' || e.status === 'CALLED')),
-    )[0];
-    if (!target) return null;
-    target.status = 'NO_SHOW';
-    pushEvent(this.state, 'PATIENT_NO_SHOW', `${target.tokenLabel} no-show`);
-    return target;
+  public recallPatient(roomId: string, actor?: string): PatientTicket {
+    return this.store.recallPatient(roomId, actor);
   }
 
-  updatePriority(queueId: string, priority: Priority): QueueEntry | null {
-    const entry = this.getQueueById(queueId);
-    if (!entry) return null;
-    entry.priority = priority;
-    pushEvent(this.state, 'PRIORITY_CHANGED', `${entry.tokenLabel} -> ${priority}`);
-    return entry;
+  public skipTicket(roomId: string, actor?: string): PatientTicket {
+    return this.store.skipTicket(roomId, actor);
   }
 
-  updateDoctorDelay(doctorId: string, minutes: number): Doctor | null {
-    const doctor = this.getDoctor(doctorId);
-    if (!doctor) return null;
-    doctor.currentDelayMinutes = Math.max(0, Number(minutes) || 0);
-    pushEvent(this.state, 'DOCTOR_DELAY_UPDATED', `${doctor.name} delay ${doctor.currentDelayMinutes}min`);
-    return doctor;
+  public cancelTicket(ticketId: string, reason?: string, actor?: string): PatientTicket {
+    return this.store.cancelTicket(ticketId, actor, reason);
   }
 
-  toggleDoctorAvailability(doctorId: string): Doctor | null {
-    const doctor = this.getDoctor(doctorId);
-    if (!doctor) return null;
-    doctor.availabilityStatus = doctor.availabilityStatus === 'AVAILABLE' ? 'UNAVAILABLE' : 'AVAILABLE';
-    pushEvent(this.state, 'DOCTOR_STATUS_CHANGED', `${doctor.name} -> ${doctor.availabilityStatus}`);
-    return doctor;
+  public updatePriority(ticketId: string, priority: TriageLevel, reason: string, actor?: string): PatientTicket {
+    if (!reason || !reason.trim()) {
+      throw new BadRequestException('Reason is mandatory for priority adjustments.');
+    }
+    return this.store.updatePriority(ticketId, priority, reason, actor);
+  }
+
+  public updateDoctorStatus(doctorId: string, status: DoctorAvailability): DoctorProfile {
+    return this.store.updateDoctorStatus(doctorId, status);
+  }
+
+  public updateRoomStatus(roomId: string, status: RoomStatus): DoctorRoom {
+    return this.store.updateRoomStatus(roomId, status);
+  }
+
+  public getActiveTicketForPatient(patientId: string): PatientTicket | null {
+    return this.store.getActiveTicketForPatient(patientId);
+  }
+
+  public getTicketsForPatient(patientId: string): PatientTicket[] {
+    return this.store.getTicketsForPatient(patientId);
   }
 }
