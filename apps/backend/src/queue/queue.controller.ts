@@ -1,154 +1,167 @@
-import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { QueueGateway } from './queue.gateway';
 import { QueueService } from './queue.service';
-import type { Priority } from './queue.types';
+import {
+  DoctorAvailability,
+  RoomStatus,
+  TriageLevel,
+  VisitType,
+} from './queue.types';
 
-@Controller()
+@Controller('queue')
 export class QueueController {
   constructor(
     private readonly queueService: QueueService,
-    private readonly queueGateway: QueueGateway,
+    private readonly queueGateway: QueueGateway
   ) {}
 
-  @Get('bootstrap')
-  bootstrap() {
+  @Get('snapshot')
+  getSnapshot() {
     return this.queueService.snapshot();
   }
 
-  @Get('hospitals')
-  hospitals() {
-    return this.queueService.hospitals();
+  @Get('patient/:id/active')
+  getActiveTicket(@Param('id') id: string) {
+    return this.queueService.getActiveTicketForPatient(id);
   }
 
-  @Get('hospitals/:id/departments')
-  departments(@Param('id') id: string) {
-    return this.queueService.departments(id);
+  @Get('patient/:id/tickets')
+  getPatientTickets(@Param('id') id: string) {
+    return this.queueService.getTicketsForPatient(id);
   }
 
-  @Get('departments/:id/doctors')
-  doctors(@Param('id') id: string) {
-    return this.queueService.doctors(id);
-  }
-
-  @Get('doctors/:id')
-  doctor(@Param('id') id: string) {
-    const doctor = this.queueService.getDoctor(id);
-    if (!doctor) throw new NotFoundException('Not found');
-    return doctor;
-  }
-
-  @Get('doctors/:id/queue')
-  doctorQueue(@Param('id') id: string) {
-    return this.queueService.getActiveQueueForDoctor(id);
-  }
-
-  @Get('queue/:id')
-  queue(@Param('id') id: string) {
-    const entry = this.queueService.getQueueById(id);
-    if (!entry) throw new NotFoundException('Not found');
-    return entry;
-  }
-
-  @Get('patients/:phone')
-  patient(@Param('phone') phone: string) {
-    return this.queueService.getPatientByPhone(phone);
-  }
-
-  @Get('patients/:phone/queues')
-  patientQueues(@Param('phone') phone: string) {
-    const patient = this.queueService.getPatientByPhone(phone);
-    if (!patient) return [];
-    return this.queueService.getQueuesForPatient(patient.id);
-  }
-
-  @Post('patients/register')
-  registerPatient(@Body() input: { name: string; phone: string; age?: string; gender?: string; hospitalId: string }) {
-    const patient = this.queueService.registerPatient(input);
+  @Post('tickets/issue')
+  issueTicket(
+    @Body()
+    input: {
+      patientId: string;
+      patientName: string;
+      patientPhone: string;
+      departmentId: string;
+      visitType: VisitType;
+      reason: string;
+    }
+  ) {
+    const ticket = this.queueService.issueTicket(input);
     this.queueGateway.broadcast();
-    return patient;
+    return ticket;
   }
 
-  @Post('queues/join')
-  joinQueue(@Body() input: { patientId: string; doctorId: string; priority: Priority; visitType: string; reason?: string }) {
-    const entry = this.queueService.joinQueue(input);
-    if (!entry) throw new BadRequestException('Unable to join queue');
+  @Post('tickets/:id/triage')
+  triageTicket(
+    @Param('id') id: string,
+    @Body()
+    input: {
+      triageLevel: TriageLevel;
+      vitals?: { bp?: string; pulse?: string; temp?: string; spo2?: string };
+      triageNotes?: string;
+      actor?: string;
+    }
+  ) {
+    const ticket = this.queueService.triageTicket(id, input);
     this.queueGateway.broadcast();
-    return entry;
+    return ticket;
   }
 
-  @Post('doctors/:id/call')
-  call(@Param('id') id: string) {
-    const entry = this.queueService.callPatient(id);
-    if (!entry) throw new NotFoundException('No patient to call');
+  @Post('rooms/:id/call-next')
+  callNext(@Param('id') id: string, @Body() body?: { actor?: string }) {
+    const ticket = this.queueService.callNext(id, body?.actor);
     this.queueGateway.broadcast();
-    return entry;
+    return ticket;
   }
 
-  @Post('doctors/:id/start')
-  start(@Param('id') id: string) {
-    const entry = this.queueService.startConsultation(id);
-    if (!entry) throw new NotFoundException('No queue entry found');
+  @Post('rooms/:id/start')
+  startConsultation(@Param('id') id: string, @Body() body?: { actor?: string }) {
+    const ticket = this.queueService.startConsultation(id, body?.actor);
     this.queueGateway.broadcast();
-    return entry;
+    return ticket;
   }
 
-  @Post('doctors/:id/complete')
-  complete(@Param('id') id: string) {
-    const entry = this.queueService.completeConsultation(id);
-    if (!entry) throw new NotFoundException('No active consultation');
+  @Post('rooms/:id/finish')
+  finishConsultation(
+    @Param('id') id: string,
+    @Body() body?: { notes?: string; actor?: string }
+  ) {
+    const ticket = this.queueService.finishConsultation(id, body?.notes, body?.actor);
     this.queueGateway.broadcast();
-    return entry;
+    return ticket;
   }
 
-  @Post('doctors/:id/skip')
-  skip(@Param('id') id: string) {
-    const entry = this.queueService.skipPatient(id);
-    if (!entry) throw new NotFoundException('No waiting entry');
+  @Post('rooms/:id/no-show')
+  markNoShow(
+    @Param('id') id: string,
+    @Body() body?: { reason?: string; actor?: string }
+  ) {
+    const ticket = this.queueService.markNoShow(id, body?.reason, body?.actor);
     this.queueGateway.broadcast();
-    return entry;
+    return ticket;
   }
 
-  @Post('doctors/:id/no-show')
-  noShow(@Param('id') id: string) {
-    const entry = this.queueService.markNoShow(id);
-    if (!entry) throw new NotFoundException('No waiting entry');
+  @Post('rooms/:id/recall')
+  recallPatient(@Param('id') id: string, @Body() body?: { actor?: string }) {
+    const ticket = this.queueService.recallPatient(id, body?.actor);
     this.queueGateway.broadcast();
-    return entry;
+    return ticket;
   }
 
-  @Patch('queue/:id/priority')
-  priority(@Param('id') id: string, @Body() input: { priority: Priority }) {
-    const entry = this.queueService.updatePriority(id, input.priority);
-    if (!entry) throw new NotFoundException('Not found');
+  @Post('rooms/:id/skip')
+  skipTicket(@Param('id') id: string, @Body() body?: { actor?: string }) {
+    const ticket = this.queueService.skipTicket(id, body?.actor);
     this.queueGateway.broadcast();
-    return entry;
+    return ticket;
   }
 
-  @Patch('doctors/:id/delay')
-  delay(@Param('id') id: string, @Body() input: { minutes: number }) {
-    const doctor = this.queueService.updateDoctorDelay(id, input.minutes);
-    if (!doctor) throw new NotFoundException('Not found');
+  @Post('tickets/:id/cancel')
+  cancelTicket(
+    @Param('id') id: string,
+    @Body() body?: { reason?: string; actor?: string }
+  ) {
+    const ticket = this.queueService.cancelTicket(id, body?.reason, body?.actor);
     this.queueGateway.broadcast();
-    return doctor;
+    return ticket;
+  }
+
+  @Patch('tickets/:id/priority')
+  updatePriority(
+    @Param('id') id: string,
+    @Body() input: { priority: TriageLevel; reason: string; actor?: string }
+  ) {
+    const ticket = this.queueService.updatePriority(
+      id,
+      input.priority,
+      input.reason,
+      input.actor
+    );
+    this.queueGateway.broadcast();
+    return ticket;
   }
 
   @Patch('doctors/:id/status')
-  status(@Param('id') id: string) {
-    const doctor = this.queueService.toggleDoctorAvailability(id);
-    if (!doctor) throw new NotFoundException('Not found');
+  updateDoctorStatus(
+    @Param('id') id: string,
+    @Body() input: { status: DoctorAvailability }
+  ) {
+    const doc = this.queueService.updateDoctorStatus(id, input.status);
     this.queueGateway.broadcast();
-    return doctor;
+    return doc;
   }
 
-  @Get('dashboard/overview')
-  overview() {
-    const next = this.queueService.snapshot();
-    const active = next.queues.filter((q) => ['WAITING', 'NOTIFIED', 'CALLED', 'IN_CONSULTATION'].includes(q.status));
-    return {
-      activeTokens: active.length,
-      averageWait: active.length ? Math.round(active.reduce((sum, q) => sum + (q.estimatedWaitMinutes ?? 0), 0) / active.length) : 0,
-      hospitals: next.hospitals.length,
-      doctors: next.doctors.length,
-    };
+  @Patch('rooms/:id/status')
+  updateRoomStatus(
+    @Param('id') id: string,
+    @Body() input: { status: RoomStatus }
+  ) {
+    const room = this.queueService.updateRoomStatus(id, input.status);
+    this.queueGateway.broadcast();
+    return room;
   }
 }

@@ -1,78 +1,169 @@
-export type Priority = 'EMERGENCY' | 'URGENT' | 'NORMAL' | 'FOLLOW_UP';
-export type QueueStatus =
+export type TriageLevel = 'URGENT' | 'NORMAL' | 'FOLLOW_UP';
+
+export type TicketStatus =
+  | 'CREATED'
+  | 'TRIAGE_PENDING'
   | 'WAITING'
-  | 'NOTIFIED'
   | 'CALLED'
   | 'IN_CONSULTATION'
   | 'COMPLETED'
+  | 'CANCELLED'
   | 'SKIPPED'
-  | 'NO_SHOW'
-  | 'CANCELLED';
-export type DoctorAvailability = 'AVAILABLE' | 'UNAVAILABLE';
+  | 'NO_SHOW';
 
-export interface Hospital {
-  id: string;
-  name: string;
-  location: string;
-}
+export type DoctorAvailability =
+  | 'AVAILABLE'
+  | 'CALLING'
+  | 'IN_CONSULTATION'
+  | 'ON_BREAK'
+  | 'PAUSED'
+  | 'OFFLINE';
+
+export type RoomStatus = 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE' | 'CLOSED';
+
+export type QueuePressure = 'NORMAL' | 'MODERATE' | 'HIGH';
+
+export type VisitType = 'NEW' | 'FOLLOW_UP' | 'REVIEW' | 'OTHER';
 
 export interface Department {
   id: string;
-  hospitalId: string;
   name: string;
+  code: string; // e.g. "GEN", "CARD", "ORTH", "PED", "DERM"
+  description: string;
+  location: string;
 }
 
-export interface Doctor {
+export interface DoctorRoom {
   id: string;
+  roomNumber: string; // e.g. "GM-01", "GM-02", "CARD-01"
   departmentId: string;
+  status: RoomStatus;
+  currentDoctorId?: string | null;
+}
+
+export interface DoctorProfile {
+  id: string;
   name: string;
-  averageConsultationTimeMinutes: number;
-  availabilityStatus: DoctorAvailability;
-  currentDelayMinutes: number;
-  roomNumber: string;
+  departmentId: string;
+  assignedRoomId?: string | null;
+  status: DoctorAvailability;
+  averageConsultMinutes: number;
+}
+
+export interface PatientTicket {
+  id: string;
+  tokenNumber: string; // e.g. "GEN-104", "CARD-201"
+  patientId: string;   // Shared ID format e.g. "PAT-000104"
+  patientName: string;
+  patientPhone: string;
+  departmentId: string;
+  departmentName: string;
+  visitType: VisitType;
+  reason: string;
+  triageLevel: TriageLevel;
+  status: TicketStatus;
+  assignedDoctorId?: string | null;
+  assignedRoomId?: string | null;
+  assignedDoctorName?: string | null;
+  assignedRoomNumber?: string | null;
+  createdAt: string;
+  triagedAt?: string | null;
+  calledAt?: string | null;
+  consultationStartedAt?: string | null;
+  consultationCompletedAt?: string | null;
+  cancelledAt?: string | null;
+  vitals?: {
+    bp?: string;
+    pulse?: string;
+    temp?: string;
+    spo2?: string;
+  };
+  triageNotes?: string;
+  chiefComplaint?: string;
+  estimatedWaitMinutes?: number;
+  patientsAhead?: number;
 }
 
 export interface Patient {
   id: string;
   name: string;
   phone: string;
-  hospitalId: string;
-  age?: string;
+  age?: string | number;
   gender?: string;
+  hospitalId?: string;
+  createdAt?: string;
 }
 
-export interface QueueEntry {
-  id: string;
-  patientId: string;
-  doctorId: string;
-  priority: Priority;
-  status: QueueStatus;
-  tokenNumber: number;
-  tokenLabel: string;
-  joinedAt: string;
-  visitType: string;
-  reason?: string;
-  queuePosition?: number;
-  estimatedWaitMinutes?: number;
-  calledAt?: string;
-  consultationStartedAt?: string;
-  consultationCompletedAt?: string;
-  roomNumber?: string;
+export type DemoState = any;
+export type Priority = TriageLevel;
+export type QueueEntry = PatientTicket;
+export type QueueStatus = TicketStatus;
+
+export interface QueuePolicy {
+  approachingThreshold: number; // default: 2
+  returnWindowMinutes: number;  // default: 5
+  priorityWeights: Record<TriageLevel, number>;
 }
 
-export interface EventLog {
+export interface QueueEvent {
   id: string;
-  type: string;
+  ticketId: string;
+  eventType: string;
+  actor: string;
   detail: string;
-  createdAt: string;
+  timestamp: string;
 }
 
-export interface DemoState {
-  nextIds: { queue: number; token: number; event: number; patient: number };
-  hospitals: Hospital[];
-  departments: Department[];
-  doctors: Doctor[];
-  patients: Patient[];
-  queues: QueueEntry[];
-  events: EventLog[];
+export interface DepartmentMetrics {
+  departmentId: string;
+  departmentName: string;
+  departmentCode: string;
+  waitingCount: number;
+  consultingCount: number;
+  activeDoctors: number;
+  availableRooms: number;
+  averageWaitMinutes: number;
+  longestWaitMinutes: number;
+  urgentWaitingCount: number;
+  queuePressure: QueuePressure;
+  currentlyServing?: {
+    tokenNumber: string;
+    roomNumber: string;
+  } | null;
 }
+
+export interface QueueSnapshot {
+  departments: Department[];
+  rooms: DoctorRoom[];
+  doctors: DoctorProfile[];
+  tickets: PatientTicket[];
+  events: QueueEvent[];
+  policy: QueuePolicy;
+  metrics: DepartmentMetrics[];
+}
+
+export type Session =
+  | {
+      role: 'patient';
+      patientId: string;
+      phone?: string;
+      name?: string;
+    }
+  | {
+      role: 'staff';
+      staffId?: string;
+      staffName: string;
+      name?: string;
+      username?: string;
+      roleTitle?: string;
+      doctorProfileId?: string;
+      roomId?: string;
+      departmentId?: string;
+    }
+  | null;
+
+// Helper to determine derived APPROACHING state without mutating authoritative DB status
+export function isApproaching(ticket: PatientTicket, threshold = 2): boolean {
+  return ticket.status === 'WAITING' && (ticket.patientsAhead ?? 999) <= threshold;
+}
+
