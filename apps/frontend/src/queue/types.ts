@@ -166,4 +166,3 @@ export type Session =
 export function isApproaching(ticket: PatientTicket, threshold = 2): boolean {
   return ticket.status === 'WAITING' && (ticket.patientsAhead ?? 999) <= threshold;
 }
-

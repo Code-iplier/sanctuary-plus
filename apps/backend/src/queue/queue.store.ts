@@ -12,6 +12,7 @@ import {
   DoctorAvailability,
   RoomStatus,
   VisitType,
+  QueuePressure,
 } from './queue.types';
 
 @Injectable()
