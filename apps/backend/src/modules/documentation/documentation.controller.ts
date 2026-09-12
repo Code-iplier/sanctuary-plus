@@ -23,6 +23,8 @@ import type {
   UpdateExtractionDto,
   SoapNote,
   UpdateSoapNoteDto,
+  PrescriptionItem,
+  UpdatePrescriptionsDto,
 } from './documentation.types';
 
 
@@ -120,6 +122,23 @@ export class DocumentationController {
     @Body() dto: UpdateSoapNoteDto,
   ): Promise<ClinicalEncounter> {
     return this.documentationService.updateSoapNote(id, dto.soapNote);
+  }
+
+  @Post(':id/prescriptions/suggest')
+  @HttpCode(HttpStatus.OK)
+  async suggestPrescriptions(
+    @Param('id') id: string,
+  ): Promise<PrescriptionItem[]> {
+    return this.documentationService.suggestPrescriptions(id);
+  }
+
+  @Put(':id/prescriptions')
+  @HttpCode(HttpStatus.OK)
+  async updatePrescriptions(
+    @Param('id') id: string,
+    @Body() dto: UpdatePrescriptionsDto,
+  ): Promise<ClinicalEncounter> {
+    return this.documentationService.updatePrescriptions(id, dto.prescriptions);
   }
 }
 

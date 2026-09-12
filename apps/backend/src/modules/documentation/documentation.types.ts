@@ -13,5 +13,9 @@ export type {
   UpdateExtractionDto,
   SoapNote,
   UpdateSoapNoteDto,
+  PrescriptionStatus,
+  PrescriptionItem,
+  UpdatePrescriptionsDto,
 } from '@org/models';
+
 

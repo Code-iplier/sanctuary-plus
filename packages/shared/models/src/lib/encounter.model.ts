@@ -41,6 +41,19 @@ export interface SoapNote {
   isReviewed?: boolean;
 }
 
+export type PrescriptionStatus = 'suggested' | 'approved' | 'rejected';
+
+export interface PrescriptionItem {
+  id: string;
+  medication: string;
+  dosage: string;
+  route: string;
+  frequency: string;
+  duration: string;
+  instructions: string;
+  status: PrescriptionStatus;
+}
+
 export interface ClinicalEncounter {
   id: string;
   patientId: string;
@@ -56,6 +69,7 @@ export interface ClinicalEncounter {
   reviewedByClinicianId?: string;
   extraction?: ClinicalExtraction;
   soapNote?: SoapNote;
+  prescriptions?: PrescriptionItem[];
   createdAt: string;
   updatedAt: string;
 }
@@ -69,6 +83,7 @@ export interface CreateEncounterDto {
   transcriptConfidence?: number;
   extraction?: ClinicalExtraction;
   soapNote?: SoapNote;
+  prescriptions?: PrescriptionItem[];
 }
 
 export interface UpdateEncounterDto {
@@ -81,6 +96,7 @@ export interface UpdateEncounterDto {
   transcriptReviewed?: boolean;
   extraction?: ClinicalExtraction;
   soapNote?: SoapNote;
+  prescriptions?: PrescriptionItem[];
 }
 
 export interface TranscribeAudioDto {
@@ -111,4 +127,9 @@ export interface UpdateExtractionDto {
 export interface UpdateSoapNoteDto {
   soapNote: SoapNote;
 }
+
+export interface UpdatePrescriptionsDto {
+  prescriptions: PrescriptionItem[];
+}
+
 

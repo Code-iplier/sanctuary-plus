@@ -4,7 +4,8 @@ import { DocumentationService } from './documentation.service';
 import { TranscriptionProvider, TranscriptionResult } from './transcription.provider';
 import { ExtractionProvider } from './extraction.provider';
 import { SoapProvider } from './soap.provider';
-import type { ClinicalExtraction, SoapNote } from './documentation.types';
+import { PrescriptionProvider } from './prescription.provider';
+import type { ClinicalExtraction, SoapNote, PrescriptionItem } from './documentation.types';
 
 class MockTranscriptionProvider extends TranscriptionProvider {
   async transcribe(): Promise<TranscriptionResult> {
@@ -52,20 +53,45 @@ class MockSoapProvider extends SoapProvider {
   }
 }
 
-describe('DocumentationService (Phase 1, 2, 3 & 4)', () => {
+class MockPrescriptionProvider extends PrescriptionProvider {
+  async suggestPrescriptions(
+    transcript: string,
+  ): Promise<PrescriptionItem[]> {
+    if (!transcript || transcript.trim().length < 5) {
+      throw new BadRequestException('Transcript too short');
+    }
+    return [
+      {
+        id: 'rx-mock-1',
+        medication: 'Amoxicillin',
+        dosage: '500 mg',
+        route: 'oral',
+        frequency: 'TID',
+        duration: '7 days',
+        instructions: 'Take with food',
+        status: 'suggested',
+      },
+    ];
+  }
+}
+
+describe('DocumentationService (Phase 1, 2, 3, 4 & 5)', () => {
   let service: DocumentationService;
   let mockTranscriptionProvider: MockTranscriptionProvider;
   let mockExtractionProvider: MockExtractionProvider;
   let mockSoapProvider: MockSoapProvider;
+  let mockPrescriptionProvider: MockPrescriptionProvider;
 
   beforeEach(() => {
     mockTranscriptionProvider = new MockTranscriptionProvider();
     mockExtractionProvider = new MockExtractionProvider();
     mockSoapProvider = new MockSoapProvider();
+    mockPrescriptionProvider = new MockPrescriptionProvider();
     service = new DocumentationService(
       mockTranscriptionProvider,
       mockExtractionProvider,
       mockSoapProvider,
+      mockPrescriptionProvider,
     );
   });
 
@@ -304,6 +330,62 @@ describe('DocumentationService (Phase 1, 2, 3 & 4)', () => {
           assessment: 'Test',
           plan: 'Test',
         }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('suggestPrescriptions (Phase 5)', () => {
+    it('should suggest prescriptions for an encounter with a transcript', async () => {
+      const suggestions = await service.suggestPrescriptions('enc-101');
+      expect(suggestions).toBeDefined();
+      expect(suggestions.length).toBeGreaterThan(0);
+      expect(suggestions[0].medication).toBe('Amoxicillin');
+      expect(suggestions[0].status).toBe('suggested');
+
+      const encounter = await service.getEncounterById('enc-101');
+      expect(encounter.prescriptions).toBeDefined();
+      expect(encounter.prescriptions?.some((p) => p.medication === 'Amoxicillin')).toBe(true);
+    });
+
+    it('should throw BadRequestException when encounter has empty transcript', async () => {
+      // enc-103 has no transcript
+      await expect(service.suggestPrescriptions('enc-103')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw NotFoundException for unknown encounter', async () => {
+      await expect(service.suggestPrescriptions('unknown-enc-id')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('updatePrescriptions (Phase 5)', () => {
+    it('should update prescriptions for an encounter', async () => {
+      const newPrescriptions = [
+        {
+          id: 'rx-updated-1',
+          medication: 'Metoprolol Succinate',
+          dosage: '25 mg',
+          route: 'oral',
+          frequency: 'once daily',
+          duration: '30 days',
+          instructions: 'Take in the morning with food',
+          status: 'approved' as const,
+        },
+      ];
+
+      const updatedEncounter = await service.updatePrescriptions('enc-101', newPrescriptions);
+      expect(updatedEncounter.prescriptions).toBeDefined();
+      expect(updatedEncounter.prescriptions?.length).toBe(1);
+      expect(updatedEncounter.prescriptions?.[0].medication).toBe('Metoprolol Succinate');
+      expect(updatedEncounter.prescriptions?.[0].status).toBe('approved');
+    });
+
+    it('should throw NotFoundException when updating prescriptions for non-existent encounter', async () => {
+      await expect(
+        service.updatePrescriptions('unknown-enc', []),
       ).rejects.toThrow(NotFoundException);
     });
   });

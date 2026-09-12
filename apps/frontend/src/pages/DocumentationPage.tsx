@@ -21,6 +21,9 @@ import {
   Plus,
   X,
   Edit3,
+  Trash2,
+  Check,
+  Ban,
 } from 'lucide-react';
 
 export type EncounterStatus = 'draft' | 'reviewed' | 'finalized';
@@ -58,6 +61,19 @@ export interface SoapNote {
   isReviewed?: boolean;
 }
 
+export type PrescriptionStatus = 'suggested' | 'approved' | 'rejected';
+
+export interface PrescriptionItem {
+  id: string;
+  medication: string;
+  dosage: string;
+  route: string;
+  frequency: string;
+  duration: string;
+  instructions: string;
+  status: PrescriptionStatus;
+}
+
 export interface ClinicalEncounter {
   id: string;
   patientId: string;
@@ -73,6 +89,7 @@ export interface ClinicalEncounter {
   reviewedByClinicianId?: string;
   extraction?: ClinicalExtraction;
   soapNote?: SoapNote;
+  prescriptions?: PrescriptionItem[];
   createdAt: string;
   updatedAt: string;
 }
@@ -124,6 +141,48 @@ const INITIAL_ENCOUNTERS: ClinicalEncounter[] = [
       reviewedAt: new Date(Date.now() - 3300000).toISOString(),
       isReviewed: true,
     },
+    prescriptions: [
+      {
+        id: 'rx-101-1',
+        medication: 'Aspirin',
+        dosage: '81 mg',
+        route: 'oral',
+        frequency: 'once daily',
+        duration: 'Ongoing',
+        instructions: 'Take with food in the morning',
+        status: 'approved',
+      },
+      {
+        id: 'rx-101-2',
+        medication: 'Nitroglycerin SL',
+        dosage: '0.4 mg',
+        route: 'sublingual',
+        frequency: 'every 5 minutes PRN chest pain up to 3 doses',
+        duration: '30 days',
+        instructions: 'Place under tongue; call 911 if pain unrelieved after 3 doses',
+        status: 'suggested',
+      },
+      {
+        id: 'rx-101-3',
+        medication: 'Atorvastatin',
+        dosage: '80 mg',
+        route: 'oral',
+        frequency: 'once daily',
+        duration: 'Ongoing',
+        instructions: 'Take at bedtime',
+        status: 'suggested',
+      },
+      {
+        id: 'rx-101-4',
+        medication: 'Metoprolol Tartrate',
+        dosage: '25 mg',
+        route: 'oral',
+        frequency: 'twice daily',
+        duration: '30 days',
+        instructions: 'Hold if HR < 55 bpm or SBP < 100 mmHg',
+        status: 'suggested',
+      },
+    ],
     createdAt: new Date(Date.now() - 7200000).toISOString(),
     updatedAt: new Date(Date.now() - 3600000).toISOString(),
   },
@@ -162,6 +221,28 @@ const INITIAL_ENCOUNTERS: ClinicalEncounter[] = [
       reviewedAt: new Date(Date.now() - 82500000).toISOString(),
       isReviewed: true,
     },
+    prescriptions: [
+      {
+        id: 'rx-102-1',
+        medication: 'Lisinopril',
+        dosage: '20 mg',
+        route: 'oral',
+        frequency: 'once daily',
+        duration: '90 days',
+        instructions: 'Take every morning with breakfast',
+        status: 'approved',
+      },
+      {
+        id: 'rx-102-2',
+        medication: 'Hydrochlorothiazide',
+        dosage: '12.5 mg',
+        route: 'oral',
+        frequency: 'once daily',
+        duration: '90 days',
+        instructions: 'Take in the morning to prevent nocturia',
+        status: 'suggested',
+      },
+    ],
     createdAt: new Date(Date.now() - 86400000).toISOString(),
     updatedAt: new Date(Date.now() - 82800000).toISOString(),
   },
@@ -201,6 +282,20 @@ export default function DocumentationPage() {
   const [soapObjective, setSoapObjective] = useState<string>('');
   const [soapAssessment, setSoapAssessment] = useState<string>('');
   const [soapPlan, setSoapPlan] = useState<string>('');
+
+  // Phase 5: Prescription Management state
+  const [prescriptions, setPrescriptions] = useState<PrescriptionItem[]>([]);
+  const [isSuggestingPrescriptions, setIsSuggestingPrescriptions] = useState<boolean>(false);
+  const [isSavingPrescriptions, setIsSavingPrescriptions] = useState<boolean>(false);
+
+  // New Prescription manual addition state
+  const [newMedName, setNewMedName] = useState<string>('');
+  const [newMedDosage, setNewMedDosage] = useState<string>('');
+  const [newMedRoute, setNewMedRoute] = useState<string>('oral');
+  const [newMedFrequency, setNewMedFrequency] = useState<string>('once daily');
+  const [newMedDuration, setNewMedDuration] = useState<string>('30 days');
+  const [newMedInstructions, setNewMedInstructions] = useState<string>('');
+  const [showAddPrescription, setShowAddPrescription] = useState<boolean>(false);
 
   // New item inputs for each category in extraction editor
   const [newSymptom, setNewSymptom] = useState<string>('');
@@ -247,6 +342,8 @@ export default function DocumentationPage() {
       setSoapAssessment(activeEncounter.soapNote?.assessment || '');
       setSoapPlan(activeEncounter.soapNote?.plan || '');
       setIsEditingSoap(false);
+      setPrescriptions(activeEncounter.prescriptions || []);
+      setShowAddPrescription(false);
       setAudioBlob(null);
       setAudioUrl(null);
       setUploadedFileName(null);
@@ -874,6 +971,176 @@ export default function DocumentationPage() {
     }
   };
 
+  // Real Phase 5: Suggest Prescriptions using Gemini
+  const handleSuggestPrescriptions = async () => {
+    const transcriptText = editableTranscript.trim();
+    if (!transcriptText || transcriptText.length < 10) {
+      setAlertInfo({
+        type: 'warning',
+        message:
+          'Transcript is too short or empty to suggest prescriptions. Please provide consultation text first.',
+      });
+      return;
+    }
+
+    setIsSuggestingPrescriptions(true);
+    setAlertInfo(null);
+
+    try {
+      if (editableTranscript !== activeEncounter.rawTranscript) {
+        await fetch(`/api/encounters/${activeEncounter.id}/transcript`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transcript: editableTranscript,
+            clinicianId: activeEncounter.clinicianId || 'doc-smith',
+          }),
+        });
+      }
+
+      const response = await fetch(
+        `/api/encounters/${activeEncounter.id}/prescriptions/suggest`,
+        {
+          method: 'POST',
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `Prescription suggestion failed (HTTP ${response.status})`,
+        );
+      }
+
+      const suggestedItems: PrescriptionItem[] = await response.json();
+      setPrescriptions(suggestedItems);
+
+      // Update active encounter in encounters list
+      setEncounters((prev) =>
+        prev.map((enc) =>
+          enc.id === activeEncounter.id
+            ? {
+                ...enc,
+                prescriptions: suggestedItems,
+                rawTranscript: editableTranscript,
+                updatedAt: new Date().toISOString(),
+              }
+            : enc,
+        ),
+      );
+
+      setAlertInfo({
+        type: 'success',
+        message: `Generated ${suggestedItems.length} evidence-based prescription suggestions with allergy contraindication safety checks. Review each item below.`,
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAlertInfo({
+        type: 'danger',
+        message: `Failed to suggest prescriptions: ${error.message}`,
+      });
+    } finally {
+      setIsSuggestingPrescriptions(false);
+    }
+  };
+
+  // Save clinician-reviewed prescriptions list
+  const handleSavePrescriptions = async () => {
+    setIsSavingPrescriptions(true);
+    setAlertInfo(null);
+
+    try {
+      const response = await fetch(
+        `/api/encounters/${activeEncounter.id}/prescriptions`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prescriptions }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `Failed to save prescriptions (HTTP ${response.status})`,
+        );
+      }
+
+      const updatedEncounter: ClinicalEncounter = await response.json();
+      setEncounters((prev) =>
+        prev.map((enc) =>
+          enc.id === activeEncounter.id ? updatedEncounter : enc,
+        ),
+      );
+      setPrescriptions(updatedEncounter.prescriptions || prescriptions);
+
+      setAlertInfo({
+        type: 'success',
+        message: `Prescriptions successfully saved and updated for Encounter ${activeEncounter.id}.`,
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAlertInfo({
+        type: 'danger',
+        message: `Failed to save prescriptions: ${error.message}`,
+      });
+    } finally {
+      setIsSavingPrescriptions(false);
+    }
+  };
+
+  const handleApprovePrescription = (id: string) => {
+    setPrescriptions((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, status: 'approved' as const } : item,
+      ),
+    );
+  };
+
+  const handleRejectPrescription = (id: string) => {
+    setPrescriptions((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, status: 'rejected' as const } : item,
+      ),
+    );
+  };
+
+  const handleDeletePrescription = (id: string) => {
+    setPrescriptions((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleAddManualPrescription = () => {
+    if (!newMedName.trim() || !newMedDosage.trim()) {
+      setAlertInfo({
+        type: 'warning',
+        message: 'Medication name and dosage are required to add a prescription.',
+      });
+      return;
+    }
+
+    const newItem: PrescriptionItem = {
+      id: `rx-manual-${Date.now()}`,
+      medication: newMedName.trim(),
+      dosage: newMedDosage.trim(),
+      route: newMedRoute.trim() || 'oral',
+      frequency: newMedFrequency.trim() || 'once daily',
+      duration: newMedDuration.trim() || '30 days',
+      instructions: newMedInstructions.trim() || 'Take as directed',
+      status: 'suggested',
+    };
+
+    setPrescriptions((prev) => [...prev, newItem]);
+    setNewMedName('');
+    setNewMedDosage('');
+    setNewMedRoute('oral');
+    setNewMedFrequency('once daily');
+    setNewMedDuration('30 days');
+    setNewMedInstructions('');
+    setShowAddPrescription(false);
+  };
+
   const formatSeconds = (sec: number) => {
     const m = Math.floor(sec / 60)
       .toString()
@@ -1175,6 +1442,25 @@ export default function DocumentationPage() {
                       <>
                         <Sparkles size={16} />
                         Generate SOAP Note
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    onPress={handleSuggestPrescriptions}
+                    isDisabled={isSuggestingPrescriptions || !editableTranscript.trim()}
+                    className="flex items-center gap-1.5"
+                  >
+                    {isSuggestingPrescriptions ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin" />
+                        Suggesting Rx...
+                      </>
+                    ) : (
+                      <>
+                        <Pill size={16} />
+                        Suggest Prescriptions
                       </>
                     )}
                   </Button>
@@ -1919,6 +2205,327 @@ export default function DocumentationPage() {
                       </Button>
                     )}
                   </div>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Step 5: Prescription Management Section */}
+          <Card className="p-5 mt-4 flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-gray-200 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+                  <Pill size={20} />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-semibold">
+                      5. Prescription Management
+                    </h3>
+                    <Badge color="default" variant="soft">
+                      {prescriptions.length} Total
+                    </Badge>
+                    <Badge color="success" variant="soft">
+                      {prescriptions.filter((p) => p.status === 'approved').length} Approved
+                    </Badge>
+                    <Badge color="warning" variant="soft">
+                      {prescriptions.filter((p) => p.status === 'suggested').length} Suggested
+                    </Badge>
+                    {prescriptions.some((p) => p.status === 'rejected') && (
+                      <Badge color="danger" variant="soft">
+                        {prescriptions.filter((p) => p.status === 'rejected').length} Rejected
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    AI-assisted medication recommendations with strict allergy safety checks and clinician review.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setShowAddPrescription((prev) => !prev)}
+                  className="flex items-center gap-1.5 text-xs"
+                >
+                  <Plus size={14} />
+                  {showAddPrescription ? 'Close Form' : 'Add Medication'}
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={handleSuggestPrescriptions}
+                  isDisabled={isSuggestingPrescriptions || !editableTranscript.trim()}
+                  className="flex items-center gap-1.5 text-xs"
+                >
+                  {isSuggestingPrescriptions ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      Suggesting...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={14} />
+                      Suggest with Gemini
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onPress={handleSavePrescriptions}
+                  isDisabled={isSavingPrescriptions}
+                  className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  <Save size={14} />
+                  {isSavingPrescriptions ? 'Saving...' : 'Save Prescriptions'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Manual Add Prescription Panel */}
+            {showAddPrescription && (
+              <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/30 dark:bg-emerald-950/10 flex flex-col gap-3">
+                <div className="flex items-center justify-between pb-1 border-b border-emerald-200/50 dark:border-emerald-900/30">
+                  <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Plus size={14} />
+                    Add Prescription Order
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPrescription(false)}
+                    className="text-gray-400 hover:text-gray-600 text-xs"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                  <div className="flex flex-col gap-1 lg:col-span-2">
+                    <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                      Medication Name *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Amoxicillin, Lisinopril..."
+                      value={newMedName}
+                      onChange={(e) => setNewMedName(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                      Dosage *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 500 mg, 20 mg..."
+                      value={newMedDosage}
+                      onChange={(e) => setNewMedDosage(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                      Route
+                    </label>
+                    <select
+                      value={newMedRoute}
+                      onChange={(e) => setNewMedRoute(e.target.value)}
+                      className="px-2 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="oral">Oral</option>
+                      <option value="sublingual">Sublingual</option>
+                      <option value="IV">IV</option>
+                      <option value="inhalation">Inhalation</option>
+                      <option value="topical">Topical</option>
+                      <option value="subcutaneous">Subcutaneous</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                      Frequency
+                    </label>
+                    <select
+                      value={newMedFrequency}
+                      onChange={(e) => setNewMedFrequency(e.target.value)}
+                      className="px-2 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="once daily">Once daily</option>
+                      <option value="twice daily">Twice daily</option>
+                      <option value="three times daily">Three times daily</option>
+                      <option value="four times daily">Four times daily</option>
+                      <option value="every 4-6 hours PRN">Every 4-6 hours PRN</option>
+                      <option value="at bedtime">At bedtime</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                      Duration
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 7 days, 30 days..."
+                      value={newMedDuration}
+                      onChange={(e) => setNewMedDuration(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1 lg:col-span-5">
+                    <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                      Instructions & Warnings
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Take with food; do not take with grapefruit juice..."
+                      value={newMedInstructions}
+                      onChange={(e) => setNewMedInstructions(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div className="flex items-end justify-end lg:col-span-1">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onPress={handleAddManualPrescription}
+                      className="w-full text-xs flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      <Plus size={14} />
+                      Add to Rx
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Prescriptions List / Table */}
+            {prescriptions.length === 0 ? (
+              <div className="p-8 rounded-xl border border-dashed border-gray-300 dark:border-zinc-700 flex flex-col items-center justify-center text-center gap-2">
+                <Pill size={32} className="text-gray-400" />
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                  No prescriptions documented for this encounter yet.
+                </p>
+                <p className="text-xs text-gray-500 max-w-md">
+                  Synthesize personalized prescription recommendations based on the encounter dialogue, clinical extraction, and SOAP plan, with automatic allergy contraindication checks.
+                </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onPress={handleSuggestPrescriptions}
+                    isDisabled={isSuggestingPrescriptions || !editableTranscript.trim()}
+                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <Sparkles size={14} />
+                    Suggest Prescriptions with Gemini
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => setShowAddPrescription(true)}
+                    className="flex items-center gap-1.5 text-xs"
+                  >
+                    <Plus size={14} />
+                    Add Manually
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div className="divide-y divide-gray-200 dark:divide-zinc-800 border border-gray-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-sm">
+                  {prescriptions.map((rx) => (
+                    <div
+                      key={rx.id}
+                      className="p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-colors"
+                    >
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <div className="mt-0.5">
+                          {rx.status === 'approved' ? (
+                            <Badge color="success" variant="soft" className="text-[11px] flex items-center gap-1 font-semibold">
+                              <Check size={12} /> Approved
+                            </Badge>
+                          ) : rx.status === 'rejected' ? (
+                            <Badge color="danger" variant="soft" className="text-[11px] flex items-center gap-1 font-semibold">
+                              <Ban size={12} /> Rejected
+                            </Badge>
+                          ) : (
+                            <Badge color="warning" variant="soft" className="text-[11px] flex items-center gap-1 font-semibold">
+                              <Sparkles size={12} /> Suggested
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                              {rx.medication}
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-xs font-mono font-medium bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300">
+                              {rx.dosage}
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 uppercase">
+                              {rx.route}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              • {rx.frequency}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              ({rx.duration})
+                            </span>
+                          </div>
+                          {rx.instructions && (
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 italic">
+                              Instructions: {rx.instructions}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 self-end sm:self-center">
+                        {rx.status !== 'approved' && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onPress={() => handleApprovePrescription(rx.id)}
+                            className="text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-xs flex items-center gap-1 px-2.5 h-8"
+                          >
+                            <Check size={14} />
+                            Approve
+                          </Button>
+                        )}
+                        {rx.status !== 'rejected' && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onPress={() => handleRejectPrescription(rx.id)}
+                            className="text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-xs flex items-center gap-1 px-2.5 h-8"
+                          >
+                            <Ban size={14} />
+                            Reject
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onPress={() => handleDeletePrescription(rx.id)}
+                          className="text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs p-1.5 h-8 w-8 min-w-0"
+                          aria-label="Delete medication"
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

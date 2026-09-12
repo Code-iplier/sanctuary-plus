@@ -12,10 +12,12 @@ import type {
   TranscriptionResponseDto,
   ClinicalExtraction,
   SoapNote,
+  PrescriptionItem,
 } from './documentation.types';
 import { TranscriptionProvider } from './transcription.provider';
 import { ExtractionProvider } from './extraction.provider';
 import { SoapProvider } from './soap.provider';
+import { PrescriptionProvider } from './prescription.provider';
 
 @Injectable()
 export class DocumentationService {
@@ -28,6 +30,7 @@ export class DocumentationService {
     private readonly transcriptionProvider: TranscriptionProvider,
     private readonly extractionProvider: ExtractionProvider,
     private readonly soapProvider: SoapProvider,
+    private readonly prescriptionProvider: PrescriptionProvider,
   ) {
     this.seedInitialEncounters();
   }
@@ -83,6 +86,48 @@ export class DocumentationService {
           reviewedAt: new Date(Date.now() - 3300000).toISOString(),
           isReviewed: true,
         },
+        prescriptions: [
+          {
+            id: 'rx-101-1',
+            medication: 'Aspirin (Chewable)',
+            dosage: '324mg',
+            route: 'oral',
+            frequency: 'Stat (once)',
+            duration: 'Immediate',
+            instructions: 'Chew immediately for acute chest discomfort',
+            status: 'approved',
+          },
+          {
+            id: 'rx-101-2',
+            medication: 'Nitroglycerin Sublingual',
+            dosage: '0.4mg',
+            route: 'sublingual',
+            frequency: 'every 5 minutes PRN',
+            duration: 'Up to 3 doses',
+            instructions: 'Dissolve under tongue for active chest pressure. Call EMS if unresolved.',
+            status: 'approved',
+          },
+          {
+            id: 'rx-101-3',
+            medication: 'Atorvastatin',
+            dosage: '80mg',
+            route: 'oral',
+            frequency: 'once daily',
+            duration: '30 days',
+            instructions: 'Take in the evening at bedtime',
+            status: 'approved',
+          },
+          {
+            id: 'rx-101-4',
+            medication: 'Metoprolol Tartrate',
+            dosage: '25mg',
+            route: 'oral',
+            frequency: 'twice daily',
+            duration: '30 days',
+            instructions: 'Take with or immediately after meals',
+            status: 'suggested',
+          },
+        ],
         createdAt: new Date(Date.now() - 7200000).toISOString(),
         updatedAt: new Date(Date.now() - 3600000).toISOString(),
       },
@@ -126,6 +171,28 @@ export class DocumentationService {
           reviewedAt: new Date(Date.now() - 82500000).toISOString(),
           isReviewed: true,
         },
+        prescriptions: [
+          {
+            id: 'rx-102-1',
+            medication: 'Lisinopril',
+            dosage: '20mg',
+            route: 'oral',
+            frequency: 'once daily',
+            duration: '90 days',
+            instructions: 'Take in the morning with breakfast',
+            status: 'approved',
+          },
+          {
+            id: 'rx-102-2',
+            medication: 'Hydrochlorothiazide',
+            dosage: '12.5mg',
+            route: 'oral',
+            frequency: 'once daily',
+            duration: '30 days',
+            instructions: 'Take in the morning to prevent nocturnal diuresis',
+            status: 'suggested',
+          },
+        ],
         createdAt: new Date(Date.now() - 86400000).toISOString(),
         updatedAt: new Date(Date.now() - 82800000).toISOString(),
       },
@@ -190,6 +257,7 @@ export class DocumentationService {
       transcriptReviewed: false,
       extraction: dto.extraction,
       soapNote: dto.soapNote,
+      prescriptions: dto.prescriptions,
       createdAt: now,
       updatedAt: now,
     };
@@ -227,6 +295,8 @@ export class DocumentationService {
           : encounter.transcriptReviewed,
       extraction: dto.extraction !== undefined ? dto.extraction : encounter.extraction,
       soapNote: dto.soapNote !== undefined ? dto.soapNote : encounter.soapNote,
+      prescriptions:
+        dto.prescriptions !== undefined ? dto.prescriptions : encounter.prescriptions,
       updatedAt: now,
     };
 
@@ -391,6 +461,54 @@ export class DocumentationService {
 
     this.encounters.set(id, encounter);
     this.logger.log(`Updated and reviewed SOAP note for encounter ${id}`);
+    return encounter;
+  }
+
+  async suggestPrescriptions(id: string): Promise<PrescriptionItem[]> {
+    const encounter = await this.getEncounterById(id);
+
+    if (!encounter.rawTranscript || encounter.rawTranscript.trim().length < 10) {
+      throw new BadRequestException(
+        'Encounter transcript is empty or too short for prescription suggestions. Please transcribe consultation audio first.',
+      );
+    }
+
+    this.logger.log(
+      `Suggesting prescriptions for encounter ${id} (transcript length: ${encounter.rawTranscript.length})`,
+    );
+
+    const suggestions = await this.prescriptionProvider.suggestPrescriptions(
+      encounter.rawTranscript,
+      encounter.extraction,
+      encounter.soapNote,
+    );
+
+    const now = new Date().toISOString();
+    encounter.prescriptions = suggestions;
+    encounter.updatedAt = now;
+
+    this.encounters.set(id, encounter);
+    this.logger.log(
+      `Encounter ${id} updated with ${suggestions.length} suggested prescriptions`,
+    );
+
+    return suggestions;
+  }
+
+  async updatePrescriptions(
+    id: string,
+    prescriptions: PrescriptionItem[],
+  ): Promise<ClinicalEncounter> {
+    const encounter = await this.getEncounterById(id);
+    const now = new Date().toISOString();
+
+    encounter.prescriptions = prescriptions;
+    encounter.updatedAt = now;
+
+    this.encounters.set(id, encounter);
+    this.logger.log(
+      `Updated prescriptions for encounter ${id} (${prescriptions.length} items)`,
+    );
     return encounter;
   }
 }

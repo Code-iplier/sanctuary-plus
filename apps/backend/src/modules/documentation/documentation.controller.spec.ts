@@ -11,11 +11,24 @@ import type {
   UpdateExtractionDto,
   SoapNote,
   UpdateSoapNoteDto,
+  PrescriptionItem,
+  UpdatePrescriptionsDto,
 } from './documentation.types';
 
 describe('DocumentationController', () => {
   let controller: DocumentationController;
   let service: DocumentationService;
+
+  const mockPrescription: PrescriptionItem = {
+    id: 'rx-1',
+    medication: 'Amoxicillin',
+    dosage: '500 mg',
+    route: 'oral',
+    frequency: 'TID',
+    duration: '7 days',
+    instructions: 'Take with food',
+    status: 'suggested',
+  };
 
   const mockEncounter: ClinicalEncounter = {
     id: 'enc-101',
@@ -27,6 +40,7 @@ describe('DocumentationController', () => {
     updatedAt: '2026-09-13T00:00:00.000Z',
     rawTranscript: '[Doctor]: Patient has cough and fever.',
     transcriptReviewed: true,
+    prescriptions: [mockPrescription],
   };
 
   const mockExtraction: ClinicalExtraction = {
@@ -75,6 +89,11 @@ describe('DocumentationController', () => {
       updateSoapNote: vi.fn().mockResolvedValue({
         ...mockEncounter,
         soapNote: mockSoapNote,
+      }),
+      suggestPrescriptions: vi.fn().mockResolvedValue([mockPrescription]),
+      updatePrescriptions: vi.fn().mockResolvedValue({
+        ...mockEncounter,
+        prescriptions: [mockPrescription],
       }),
     } as unknown as DocumentationService;
 
@@ -150,6 +169,19 @@ describe('DocumentationController', () => {
     const result = await controller.updateSoapNote('enc-101', dto);
     expect(result.soapNote).toEqual(mockSoapNote);
     expect(service.updateSoapNote).toHaveBeenCalledWith('enc-101', mockSoapNote);
+  });
+
+  it('should suggest prescriptions (Phase 5)', async () => {
+    const result = await controller.suggestPrescriptions('enc-101');
+    expect(result).toEqual([mockPrescription]);
+    expect(service.suggestPrescriptions).toHaveBeenCalledWith('enc-101');
+  });
+
+  it('should update prescriptions (Phase 5)', async () => {
+    const dto: UpdatePrescriptionsDto = { prescriptions: [mockPrescription] };
+    const result = await controller.updatePrescriptions('enc-101', dto);
+    expect(result.prescriptions).toEqual([mockPrescription]);
+    expect(service.updatePrescriptions).toHaveBeenCalledWith('enc-101', [mockPrescription]);
   });
 });
 

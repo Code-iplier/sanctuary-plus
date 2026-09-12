@@ -10,6 +10,10 @@ import {
   GeminiExtractionProvider,
 } from './extraction.provider';
 import { SoapProvider, GeminiSoapProvider } from './soap.provider';
+import {
+  PrescriptionProvider,
+  GeminiPrescriptionProvider,
+} from './prescription.provider';
 
 @Module({
   controllers: [DocumentationController],
@@ -27,12 +31,17 @@ import { SoapProvider, GeminiSoapProvider } from './soap.provider';
       provide: SoapProvider,
       useClass: GeminiSoapProvider,
     },
+    {
+      provide: PrescriptionProvider,
+      useClass: GeminiPrescriptionProvider,
+    },
   ],
   exports: [
     DocumentationService,
     TranscriptionProvider,
     ExtractionProvider,
     SoapProvider,
+    PrescriptionProvider,
   ],
 })
 export class DocumentationModule {}
