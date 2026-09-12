@@ -1,6 +1,125 @@
 /* Chronos domain styles — scoped under .chronos-root. No global :root overwrites. */
 .chronos-root {
   --chronos-accent: var(--hero-color-primary);
+  --chronos-navy: #0f2742;
+  --chronos-border: #dbe4ee;
+}
+
+.chronos-root .chronos-command-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--chronos-border);
+  border-radius: 1rem;
+  background: linear-gradient(100deg, var(--chronos-navy), #173b5c);
+  color: white;
+}
+.chronos-root .chronos-command-heading {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+}
+.chronos-root .chronos-command-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.7rem;
+  display: grid;
+  place-items: center;
+  color: #b8f3e1;
+  background: rgba(255, 255, 255, 0.1);
+}
+.chronos-root .chronos-command-bar h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+}
+.chronos-root .chronos-command-bar p {
+  font-size: 0.75rem;
+  color: #d5e2ee;
+  margin: 0.15rem 0 0;
+}
+.chronos-root .chronos-eyebrow {
+  font-size: 0.62rem !important;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #9de3d0 !important;
+}
+.chronos-root .chronos-command-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: end;
+  justify-content: center;
+  gap: 0.35rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.68rem;
+  color: #d5e2ee;
+}
+.chronos-root .chronos-live-state {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.chronos-root .chronos-live-state.is-live {
+  color: #9de3d0;
+}
+.chronos-root .chronos-live-state.is-muted {
+  color: #fde68a;
+}
+.chronos-root .chronos-risk-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+.chronos-root .chronos-risk-tile {
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-left: 3px solid var(--chronos-border);
+}
+.chronos-root .chronos-risk-tile p {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #64748b;
+  margin: 0;
+}
+.chronos-root .chronos-risk-tile strong {
+  display: block;
+  font-size: 1.5rem;
+  line-height: 1.1;
+  color: #1e293b;
+}
+.chronos-root .chronos-risk-tile span {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+.chronos-root .chronos-risk-critical {
+  border-left-color: #dc2626;
+}
+.chronos-root .chronos-risk-critical svg {
+  color: #dc2626;
+}
+.chronos-root .chronos-risk-high {
+  border-left-color: #ea580c;
+}
+.chronos-root .chronos-risk-high svg {
+  color: #ea580c;
+}
+.chronos-root .chronos-risk-moderate {
+  border-left-color: #0891b2;
+}
+.chronos-root .chronos-risk-moderate svg {
+  color: #0891b2;
+}
+.chronos-root .chronos-risk-low {
+  border-left-color: #059669;
+}
+.chronos-root .chronos-risk-low svg {
+  color: #059669;
 }
 
 .chronos-root .chronos-grid {
@@ -11,5 +130,16 @@
 @media (min-width: 1024px) {
   .chronos-root .chronos-layout {
     grid-template-columns: 1fr 360px;
+  }
+}
+@media (max-width: 700px) {
+  .chronos-root .chronos-command-bar {
+    flex-direction: column;
+  }
+  .chronos-root .chronos-command-meta {
+    align-items: start;
+  }
+  .chronos-root .chronos-risk-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
