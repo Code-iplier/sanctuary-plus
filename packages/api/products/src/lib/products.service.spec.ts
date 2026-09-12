@@ -1,6 +1,7 @@
 import { ProductsService } from './products.service';
 // eslint-disable-next-line
 import { ProductFilter } from '@org/models';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 describe('ProductsService', () => {
   let service: ProductsService;
@@ -23,7 +24,7 @@ describe('ProductsService', () => {
       const filter: ProductFilter = { category: 'Electronics' };
       const result = service.getProducts(filter);
 
-      result.items.forEach(product => {
+      result.items.forEach((product) => {
         expect(product.category).toBe('Electronics');
       });
     });
@@ -33,7 +34,7 @@ describe('ProductsService', () => {
       const result = service.getProducts(filter);
 
       expect(result.items.length).toBeGreaterThan(0);
-      result.items.forEach(product => {
+      result.items.forEach((product) => {
         const matchesSearch =
           product.name.toLowerCase().includes('wireless') ||
           product.description.toLowerCase().includes('wireless');
@@ -45,7 +46,7 @@ describe('ProductsService', () => {
       const filter: ProductFilter = { inStock: true };
       const result = service.getProducts(filter);
 
-      result.items.forEach(product => {
+      result.items.forEach((product) => {
         expect(product.inStock).toBe(true);
       });
     });
@@ -54,7 +55,7 @@ describe('ProductsService', () => {
       const filter: ProductFilter = { minPrice: 50, maxPrice: 100 };
       const result = service.getProducts(filter);
 
-      result.items.forEach(product => {
+      result.items.forEach((product) => {
         expect(product.price).toBeGreaterThanOrEqual(50);
         expect(product.price).toBeLessThanOrEqual(100);
       });
@@ -78,7 +79,7 @@ describe('ProductsService', () => {
       };
       const result = service.getProducts(filter);
 
-      result.items.forEach(product => {
+      result.items.forEach((product) => {
         expect(product.category).toBe('Electronics');
         expect(product.inStock).toBe(true);
         expect(product.price).toBeLessThanOrEqual(200);
