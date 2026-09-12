@@ -197,7 +197,7 @@ jobs:
         run: gunzip -c backend-image.tar.gz | docker load
 
       - name: Scan image
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
           format: table
@@ -206,7 +206,7 @@ jobs:
           exit-code: '0'
 
       - name: Generate SARIF report
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
           format: sarif
