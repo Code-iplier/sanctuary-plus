@@ -29,8 +29,13 @@ import RiskPage from './pages/RiskPage';
 import WardSyncPage from './pages/WardSyncPage';
 import ChronosPage from './pages/ChronosPage';
 import DashboardPage from './pages/DashboardPage';
-import { findPatientByPhone, registerPatient, fetchBootstrap } from './queue/api';
+import {
+  findPatientByPhone,
+  registerPatient,
+  fetchBootstrap,
+} from './queue/api';
 import type { Session, DemoState, Patient } from './queue/types';
+import { loginPatient, loginStaff } from './auth/api';
 
 const SESSION_KEY = 'sanctuary-hospital-session-v1';
 
@@ -58,16 +63,51 @@ const DEMO_PATIENTS = [
 ];
 
 const STAFF_NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, desc: 'Hospital Overview' },
-  { id: 'queue', label: 'Queue Operations', icon: Users, desc: 'Live OPD Queues' },
-  { id: 'documentation', label: 'Documentation', icon: FileText, desc: 'TipTap Clinical Notes' },
-  { id: 'medications', label: 'Medications', icon: Shield, desc: 'RxNorm & Interactions' },
-  { id: 'risk', label: 'Risk Assessment', icon: Heart, desc: 'ASCVD / LACE Score' },
-  { id: 'wardsync', label: 'WardSync', icon: RadioTower, desc: 'Ward Deterioration & Flowsheet' },
-  { id: 'chronos', label: 'Chronos ICU', icon: Activity, desc: 'Early Warning Engine' },
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    desc: 'Hospital Overview',
+  },
+  {
+    id: 'queue',
+    label: 'Queue Operations',
+    icon: Users,
+    desc: 'Live OPD Queues',
+  },
+  {
+    id: 'documentation',
+    label: 'Documentation',
+    icon: FileText,
+    desc: 'TipTap Clinical Notes',
+  },
+  {
+    id: 'medications',
+    label: 'Medications',
+    icon: Shield,
+    desc: 'RxNorm & Interactions',
+  },
+  {
+    id: 'risk',
+    label: 'Risk Assessment',
+    icon: Heart,
+    desc: 'ASCVD / LACE Score',
+  },
+  {
+    id: 'wardsync',
+    label: 'WardSync',
+    icon: RadioTower,
+    desc: 'Ward Deterioration & Flowsheet',
+  },
+  {
+    id: 'chronos',
+    label: 'Chronos ICU',
+    icon: Activity,
+    desc: 'Early Warning Engine',
+  },
 ] as const;
 
-type NavItemId = typeof STAFF_NAV_ITEMS[number]['id'];
+type NavItemId = (typeof STAFF_NAV_ITEMS)[number]['id'];
 
 function loadSession(): Session {
   try {
@@ -94,6 +134,9 @@ function saveSession(session: Session): void {
 export default function App() {
   const [session, setSession] = useState<Session>(() => loadSession());
   const [activePanel, setActivePanel] = useState<NavItemId>('dashboard');
+  const [patientPanel, setPatientPanel] = useState<'queue' | 'medications'>(
+    'queue',
+  );
 
   // Login portal states
   const [authTab, setAuthTab] = useState<'patient' | 'staff'>('patient');
@@ -107,7 +150,9 @@ export default function App() {
   const [regAge, setRegAge] = useState('');
   const [regGender, setRegGender] = useState('Female');
   const [regHospitalId, setRegHospitalId] = useState('h1');
-  const [bootstrapHospitals, setBootstrapHospitals] = useState<{ id: string; name: string }[]>([
+  const [bootstrapHospitals, setBootstrapHospitals] = useState<
+    { id: string; name: string }[]
+  >([
     { id: 'h1', name: 'City General Hospital' },
     { id: 'h2', name: 'Metro Memorial Hospital' },
     { id: 'h3', name: 'Apollo Speciality Clinic' },
@@ -154,11 +199,17 @@ export default function App() {
     try {
       const patient = await findPatientByPhone(clean);
       if (patient) {
+        const auth = await loginPatient({
+          patientId: patient.id,
+          phone: patient.phone,
+          name: patient.name,
+        }).catch(() => null);
         setSession({
           role: 'patient',
           patientId: patient.id,
           phone: patient.phone,
           name: patient.name,
+          accessToken: auth?.accessToken,
         });
       } else {
         // Patient not found: open registration with phone pre-filled
@@ -194,11 +245,17 @@ export default function App() {
         gender: regGender,
         hospitalId: regHospitalId,
       });
+      const auth = await loginPatient({
+        patientId: created.id,
+        phone: created.phone,
+        name: created.name,
+      }).catch(() => null);
       setSession({
         role: 'patient',
         patientId: created.id,
         phone: created.phone,
         name: created.name,
+        accessToken: auth?.accessToken,
       });
     } catch {
       setAuthError('Registration failed. Please try again.');
@@ -208,18 +265,22 @@ export default function App() {
   };
 
   // Staff login submit
-  const handleStaffLogin = (user: string, pass: string) => {
+  const handleStaffLogin = async (user: string, pass: string) => {
     setAuthError(null);
-    const match = STAFF_ROSTER.find((s) => s.username === user && s.password === pass);
+    const match = STAFF_ROSTER.find(
+      (s) => s.username === user && s.password === pass,
+    );
     if (!match) {
       setAuthError('Invalid staff credentials.');
       return;
     }
+    const auth = await loginStaff(user, pass).catch(() => null);
     setSession({
       role: 'staff',
       staffName: match.name,
       username: match.username,
       roleTitle: match.roleTitle,
+      accessToken: auth?.accessToken,
     });
   };
 
@@ -237,12 +298,16 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xl font-bold tracking-tight text-white">Sanctuary+</span>
+                <span className="text-xl font-bold tracking-tight text-white">
+                  Sanctuary+
+                </span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 font-semibold">
                   v1.0 Healthcare
                 </span>
               </div>
-              <p className="text-xs text-slate-400">AI-Powered Hospital Queue & Clinical Operating System</p>
+              <p className="text-xs text-slate-400">
+                AI-Powered Hospital Queue & Clinical Operating System
+              </p>
             </div>
           </div>
           <div className="hidden sm:flex items-center gap-2 text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-3 py-1.5 rounded-full">
@@ -256,8 +321,12 @@ export default function App() {
           <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-white/20 p-6 sm:p-8 text-slate-800">
             {/* Header / Description */}
             <div className="text-center mb-6">
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Hospital Access Portal</h2>
-              <p className="text-sm text-slate-500 mt-1">Select your access role to proceed to the system</p>
+              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+                Hospital Access Portal
+              </h2>
+              <p className="text-sm text-slate-500 mt-1">
+                Select your access role to proceed to the system
+              </p>
             </div>
 
             {/* Custom Segmented Switcher (Patient vs Staff) */}
@@ -269,10 +338,11 @@ export default function App() {
                   setAuthError(null);
                   setIsRegistering(false);
                 }}
-                className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${authTab === 'patient'
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${
+                  authTab === 'patient'
                     ? 'bg-white text-teal-800 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
-                  }`}
+                }`}
               >
                 <User className="h-4 w-4 text-teal-600" />
                 <span>Patient Portal</span>
@@ -283,10 +353,11 @@ export default function App() {
                   setAuthTab('staff');
                   setAuthError(null);
                 }}
-                className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${authTab === 'staff'
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${
+                  authTab === 'staff'
                     ? 'bg-white text-teal-800 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
-                  }`}
+                }`}
               >
                 <ShieldCheck className="h-4 w-4 text-teal-600" />
                 <span>Staff & Clinicians</span>
@@ -318,14 +389,17 @@ export default function App() {
                           type="tel"
                           value={patientPhone}
                           onChange={(e) => setPatientPhone(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handlePatientPhoneSubmit()}
+                          onKeyDown={(e) =>
+                            e.key === 'Enter' && handlePatientPhoneSubmit()
+                          }
                           placeholder="9000011111"
                           maxLength={15}
                           className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50/50 text-slate-900 font-medium text-base focus:bg-white focus:border-teal-600 focus:ring-4 focus:ring-teal-500/10 outline-none transition"
                         />
                       </div>
                       <p className="text-xs text-slate-400 mt-2">
-                        Enter your registered number to view your active tokens, track queue progress, or book a consultation.
+                        Enter your registered number to view your active tokens,
+                        track queue progress, or book a consultation.
                       </p>
                     </div>
 
@@ -362,8 +436,12 @@ export default function App() {
                             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/50 flex items-center justify-between text-left transition group cursor-pointer"
                           >
                             <div>
-                              <p className="text-sm font-semibold text-slate-800 group-hover:text-teal-900">{p.name}</p>
-                              <p className="text-xs text-slate-400">+91 {p.phone}</p>
+                              <p className="text-sm font-semibold text-slate-800 group-hover:text-teal-900">
+                                {p.name}
+                              </p>
+                              <p className="text-xs text-slate-400">
+                                +91 {p.phone}
+                              </p>
                             </div>
                             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 group-hover:bg-teal-100 group-hover:text-teal-800">
                               {p.note}
@@ -388,8 +466,12 @@ export default function App() {
                   <form onSubmit={handleRegisterSubmit} className="space-y-4">
                     <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                       <div>
-                        <h3 className="text-base font-bold text-slate-900">New Patient Registration</h3>
-                        <p className="text-xs text-slate-500">Provide basic information to register your profile</p>
+                        <h3 className="text-base font-bold text-slate-900">
+                          New Patient Registration
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Provide basic information to register your profile
+                        </p>
                       </div>
                       <button
                         type="button"
@@ -401,7 +483,9 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Full Name *</label>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        Full Name *
+                      </label>
                       <input
                         type="text"
                         required
@@ -414,7 +498,9 @@ export default function App() {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Age *</label>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">
+                          Age *
+                        </label>
                         <input
                           type="number"
                           required
@@ -427,7 +513,9 @@ export default function App() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Gender *</label>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">
+                          Gender *
+                        </label>
                         <select
                           value={regGender}
                           onChange={(e) => setRegGender(e.target.value)}
@@ -441,7 +529,9 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Mobile Phone *</label>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        Mobile Phone *
+                      </label>
                       <input
                         type="tel"
                         required
@@ -453,7 +543,9 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Primary Hospital *</label>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        Primary Hospital *
+                      </label>
                       <select
                         value={regHospitalId}
                         onChange={(e) => setRegHospitalId(e.target.value)}
@@ -472,7 +564,9 @@ export default function App() {
                       disabled={authLoading}
                       className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 text-white font-semibold text-sm shadow-md shadow-teal-700/20 flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer"
                     >
-                      {authLoading ? 'Registering...' : 'Register & Enter Queue Portal'}
+                      {authLoading
+                        ? 'Registering...'
+                        : 'Register & Enter Queue Portal'}
                     </button>
                   </form>
                 )}
@@ -499,8 +593,12 @@ export default function App() {
                             {s.initials}
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-slate-800 group-hover:text-teal-900">{s.name}</p>
-                            <p className="text-xs text-slate-500">{s.roleTitle}</p>
+                            <p className="text-sm font-semibold text-slate-800 group-hover:text-teal-900">
+                              {s.name}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {s.roleTitle}
+                            </p>
                           </div>
                         </div>
                         <span className="text-xs font-semibold text-teal-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
@@ -516,7 +614,9 @@ export default function App() {
                     <div className="w-full border-t border-slate-100" />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-white px-2 text-slate-400 font-semibold">Or enter credentials</span>
+                    <span className="bg-white px-2 text-slate-400 font-semibold">
+                      Or enter credentials
+                    </span>
                   </div>
                 </div>
 
@@ -528,7 +628,9 @@ export default function App() {
                   className="space-y-3"
                 >
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Staff Username</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Staff Username
+                    </label>
                     <input
                       type="text"
                       value={staffUsername}
@@ -538,7 +640,9 @@ export default function App() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Password</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Password
+                    </label>
                     <input
                       type="password"
                       value={staffPassword}
@@ -562,8 +666,10 @@ export default function App() {
         {/* Footer Disclaimer */}
         <footer className="mx-auto w-full max-w-5xl text-center py-4 border-t border-white/5">
           <p className="text-xs text-slate-400">
-            Emergency Notice: For critical life-threatening conditions, please report directly to the Emergency
-            Department triage or dial <span className="text-rose-400 font-semibold">112 / 108</span> immediately.
+            Emergency Notice: For critical life-threatening conditions, please
+            report directly to the Emergency Department triage or dial{' '}
+            <span className="text-rose-400 font-semibold">112 / 108</span>{' '}
+            immediately.
           </p>
         </footer>
       </div>
@@ -585,19 +691,43 @@ export default function App() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-base font-bold text-slate-900 tracking-tight">Sanctuary+</h1>
+                  <h1 className="text-base font-bold text-slate-900 tracking-tight">
+                    Sanctuary+
+                  </h1>
                   <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-bold border border-teal-200">
                     Patient Portal
                   </span>
                 </div>
-                <p className="text-xs text-slate-400">Live Hospital Queue & Token Tracker</p>
+                <p className="text-xs text-slate-400">
+                  Live Hospital Queue & Token Tracker
+                </p>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex flex-col text-right">
-                <span className="text-xs font-semibold text-slate-800">{session.name ?? 'Patient'}</span>
-                <span className="text-[11px] text-slate-400">{session.phone ? `+91 ${session.phone}` : 'Verified'}</span>
+                <span className="text-xs font-semibold text-slate-800">
+                  {session.name ?? 'Patient'}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {session.phone ? `+91 ${session.phone}` : 'Verified'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setPatientPanel('queue')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${patientPanel === 'queue' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500'}`}
+                >
+                  Queue
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPatientPanel('medications')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${patientPanel === 'medications' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500'}`}
+                >
+                  Medications
+                </button>
               </div>
               <button
                 type="button"
@@ -613,7 +743,15 @@ export default function App() {
 
         {/* Patient Viewport */}
         <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6">
-          <QueuePage session={session} onLogout={handleLogout} onSessionChange={setSession} />
+          {patientPanel === 'queue' ? (
+            <QueuePage
+              session={session}
+              onLogout={handleLogout}
+              onSessionChange={setSession}
+            />
+          ) : (
+            <MedicationsPage session={session} />
+          )}
         </main>
       </div>
     );
@@ -627,11 +765,17 @@ export default function App() {
       case 'dashboard':
         return <DashboardPage onNavigate={setActivePanel} />;
       case 'queue':
-        return <QueuePage session={session} onLogout={handleLogout} onSessionChange={setSession} />;
+        return (
+          <QueuePage
+            session={session}
+            onLogout={handleLogout}
+            onSessionChange={setSession}
+          />
+        );
       case 'documentation':
         return <DocumentationPage />;
       case 'medications':
-        return <MedicationsPage />;
+        return <MedicationsPage session={session} />;
       case 'risk':
         return <RiskPage />;
       case 'wardsync':
@@ -661,12 +805,16 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-base font-bold tracking-tight text-white">Sanctuary+</span>
+                <span className="text-base font-bold tracking-tight text-white">
+                  Sanctuary+
+                </span>
                 <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 font-bold">
                   Clinical Suite
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">AI-Powered Hospital Operations</p>
+              <p className="text-[11px] text-slate-400">
+                AI-Powered Hospital Operations
+              </p>
             </div>
           </div>
 
@@ -676,8 +824,12 @@ export default function App() {
                 {staffInitials}
               </div>
               <div className="text-left hidden sm:block">
-                <p className="text-xs font-semibold text-white leading-tight">{session.staffName}</p>
-                <p className="text-[10px] text-teal-300 leading-tight">{session.roleTitle ?? 'Operations Staff'}</p>
+                <p className="text-xs font-semibold text-white leading-tight">
+                  {session.staffName}
+                </p>
+                <p className="text-[10px] text-teal-300 leading-tight">
+                  {session.roleTitle ?? 'Operations Staff'}
+                </p>
               </div>
             </div>
             <button
@@ -705,12 +857,15 @@ export default function App() {
                   key={item.id}
                   type="button"
                   onClick={() => setActivePanel(item.id)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${isActive
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
+                    isActive
                       ? 'bg-teal-700 text-white shadow-sm'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
+                  }`}
                 >
-                  <Icon className={`h-4 w-4 ${isActive ? 'text-teal-200' : 'text-slate-400'}`} />
+                  <Icon
+                    className={`h-4 w-4 ${isActive ? 'text-teal-200' : 'text-slate-400'}`}
+                  />
                   <span>{item.label}</span>
                 </button>
               );

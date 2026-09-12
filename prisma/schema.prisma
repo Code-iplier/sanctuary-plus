@@ -1,0 +1,200 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MedicationSource {
+  HOME
+  HOSPITAL
+  EXTERNAL
+  DISCHARGE
+}
+
+enum MedicationStatus {
+  ACTIVE
+  REVIEW
+  HELD
+  DISCONTINUED
+  FLAGGED
+}
+
+enum MedicationRisk {
+  LOW
+  MODERATE
+  HIGH
+}
+
+enum MedicationVerificationStatus {
+  UNVERIFIED
+  VERIFIED
+  REJECTED
+}
+
+enum AllergyStatus {
+  ACTIVE
+  INACTIVE
+  UNVERIFIED
+}
+
+enum ReconciliationDecision {
+  CONTINUE
+  MODIFY
+  HOLD
+  DISCONTINUE
+  REPLACE
+  REVIEW
+}
+
+enum SafetySeverity {
+  LOW
+  MODERATE
+  HIGH
+  CRITICAL
+}
+
+model Patient {
+  id                  String                 @id @default(cuid())
+  externalId          String?                @unique
+  displayName         String
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  encounters          Encounter[]
+  medications         Medication[]
+  allergies            Allergy[]
+  reconciliations     ReconciliationRecord[]
+  medicationInteractions MedicationInteraction[]
+  auditEvents         AuditEvent[]
+}
+
+model Encounter {
+  id          String       @id @default(cuid())
+  patientId   String
+  type        String
+  status      String
+  startedAt   DateTime
+  endedAt     DateTime?
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  medications Medication[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([patientId, status])
+}
+
+model MedicationConcept {
+  id               String       @id @default(cuid())
+  displayName      String
+  genericName      String
+  rxCui            String?      @unique
+  ingredients      String[]
+  therapeuticClass String
+  source           String       @default("internal-rules")
+  sourceVersion    String?
+  medications      Medication[]
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+model Medication {
+  id               String                 @id @default(cuid())
+  patientId        String
+  encounterId      String?
+  conceptId        String?
+  name             String
+  dose             String
+  unit             String
+  strength         String
+  route            String
+  frequency        String
+  scheduled        String
+  source           MedicationSource
+  status           MedicationStatus       @default(REVIEW)
+  risk             MedicationRisk         @default(MODERATE)
+  verificationStatus MedicationVerificationStatus @default(UNVERIFIED)
+  prescriberId     String?
+  startDate        DateTime?
+  endDate          DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  patient          Patient                @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  encounter        Encounter?             @relation(fields: [encounterId], references: [id], onDelete: SetNull)
+  concept          MedicationConcept?    @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+  reconciliations  ReconciliationRecord[]
+  interactions     MedicationInteraction[]
+
+  @@index([patientId, status])
+  @@index([conceptId])
+}
+
+model Allergy {
+  id                 String         @id @default(cuid())
+  patientId          String
+  substance          String
+  normalizedSubstance String
+  reaction           String
+  severity           SafetySeverity?
+  status             AllergyStatus  @default(ACTIVE)
+  verifiedAt         DateTime?
+  patient            Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([patientId, status])
+}
+
+model ReconciliationRecord {
+  id             String                 @id @default(cuid())
+  medicationId   String
+  patientId      String
+  previousStatus MedicationStatus
+  decision       ReconciliationDecision
+  previousValue  Json?
+  newValue       Json?
+  reason         String
+  changedBy      String
+  changedAt      DateTime               @default(now())
+  medication     Medication             @relation(fields: [medicationId], references: [id], onDelete: Restrict)
+  patient        Patient                @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, changedAt])
+  @@index([medicationId, changedAt])
+}
+
+model MedicationInteraction {
+  id             String          @id @default(cuid())
+  patientId      String
+  medicationId   String
+  ruleId         String
+  severity       SafetySeverity
+  medicationNames String[]
+  description    String
+  recommendation String
+  source         String
+  ruleVersion    String
+  evaluatedAt    DateTime
+  patient        Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  medication     Medication      @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, evaluatedAt])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  patientId  String
+  actorId    String
+  actorRole  String
+  action     String
+  entityType String
+  entityId   String
+  beforeJson Json?
+  afterJson  Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, createdAt])
+  @@index([entityType, entityId])
+}
