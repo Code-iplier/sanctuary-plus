@@ -21,7 +21,10 @@ import type {
   UpdateTranscriptDto,
   ClinicalExtraction,
   UpdateExtractionDto,
+  SoapNote,
+  UpdateSoapNoteDto,
 } from './documentation.types';
+
 
 @Controller('encounters')
 export class DocumentationController {
@@ -101,4 +104,22 @@ export class DocumentationController {
   ): Promise<ClinicalEncounter> {
     return this.documentationService.updateExtraction(id, dto.extraction);
   }
+
+  @Post(':id/soap/generate')
+  @HttpCode(HttpStatus.OK)
+  async generateSoapNote(
+    @Param('id') id: string,
+  ): Promise<SoapNote> {
+    return this.documentationService.generateSoapNote(id);
+  }
+
+  @Put(':id/soap')
+  @HttpCode(HttpStatus.OK)
+  async updateSoapNote(
+    @Param('id') id: string,
+    @Body() dto: UpdateSoapNoteDto,
+  ): Promise<ClinicalEncounter> {
+    return this.documentationService.updateSoapNote(id, dto.soapNote);
+  }
 }
+

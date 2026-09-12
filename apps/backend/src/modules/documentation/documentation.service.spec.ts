@@ -3,7 +3,8 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { DocumentationService } from './documentation.service';
 import { TranscriptionProvider, TranscriptionResult } from './transcription.provider';
 import { ExtractionProvider } from './extraction.provider';
-import type { ClinicalExtraction } from './documentation.types';
+import { SoapProvider } from './soap.provider';
+import type { ClinicalExtraction, SoapNote } from './documentation.types';
 
 class MockTranscriptionProvider extends TranscriptionProvider {
   async transcribe(): Promise<TranscriptionResult> {
@@ -33,15 +34,39 @@ class MockExtractionProvider extends ExtractionProvider {
   }
 }
 
-describe('DocumentationService (Phase 1, 2 & 3)', () => {
+class MockSoapProvider extends SoapProvider {
+  async generateSoapNote(
+    transcript: string,
+  ): Promise<SoapNote> {
+    if (!transcript || transcript.trim().length < 5) {
+      throw new BadRequestException('Transcript too short');
+    }
+    return {
+      subjective: 'Patient reports cough and fever.',
+      objective: 'Mild wheezing on lung exam. BP 120/80.',
+      assessment: 'Acute bronchitis vs viral upper respiratory tract infection.',
+      plan: 'Hydration, rest, and antipyretics as needed.',
+      generatedAt: '2026-09-13T00:00:00.000Z',
+      isReviewed: false,
+    };
+  }
+}
+
+describe('DocumentationService (Phase 1, 2, 3 & 4)', () => {
   let service: DocumentationService;
   let mockTranscriptionProvider: MockTranscriptionProvider;
   let mockExtractionProvider: MockExtractionProvider;
+  let mockSoapProvider: MockSoapProvider;
 
   beforeEach(() => {
     mockTranscriptionProvider = new MockTranscriptionProvider();
     mockExtractionProvider = new MockExtractionProvider();
-    service = new DocumentationService(mockTranscriptionProvider, mockExtractionProvider);
+    mockSoapProvider = new MockSoapProvider();
+    service = new DocumentationService(
+      mockTranscriptionProvider,
+      mockExtractionProvider,
+      mockSoapProvider,
+    );
   });
 
   describe('initial seed data', () => {
@@ -227,5 +252,61 @@ describe('DocumentationService (Phase 1, 2 & 3)', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('generateSoapNote (Phase 4)', () => {
+    it('should generate a structured SOAP note for an encounter with a transcript', async () => {
+      const note = await service.generateSoapNote('enc-101');
+      expect(note).toBeDefined();
+      expect(note.subjective).toContain('Patient reports cough and fever.');
+      expect(note.objective).toContain('Mild wheezing');
+      expect(note.assessment).toBeDefined();
+      expect(note.plan).toBeDefined();
+      expect(note.isReviewed).toBe(false);
+
+      const encounter = await service.getEncounterById('enc-101');
+      expect(encounter.soapNote).toBeDefined();
+      expect(encounter.soapNote?.subjective).toBe(note.subjective);
+    });
+
+    it('should throw BadRequestException when encounter has empty transcript', async () => {
+      // enc-103 has no transcript
+      await expect(service.generateSoapNote('enc-103')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw NotFoundException for unknown encounter', async () => {
+      await expect(service.generateSoapNote('unknown-enc-id')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('updateSoapNote (Phase 4)', () => {
+    it('should update SOAP note and mark it reviewed', async () => {
+      const updatedEncounter = await service.updateSoapNote('enc-101', {
+        subjective: 'Reviewed subjective info.',
+        objective: 'Reviewed objective findings.',
+        assessment: 'Reviewed assessment.',
+        plan: 'Reviewed plan.',
+      });
+
+      expect(updatedEncounter.soapNote?.subjective).toBe('Reviewed subjective info.');
+      expect(updatedEncounter.soapNote?.isReviewed).toBe(true);
+      expect(updatedEncounter.soapNote?.reviewedAt).toBeDefined();
+    });
+
+    it('should throw NotFoundException when updating SOAP note for non-existent encounter', async () => {
+      await expect(
+        service.updateSoapNote('unknown-enc', {
+          subjective: 'Test',
+          objective: 'Test',
+          assessment: 'Test',
+          plan: 'Test',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
 });
+
 

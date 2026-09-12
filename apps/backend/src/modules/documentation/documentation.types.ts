@@ -11,4 +11,7 @@ export type {
   ClinicalVitalSign,
   ClinicalExtraction,
   UpdateExtractionDto,
+  SoapNote,
+  UpdateSoapNoteDto,
 } from '@org/models';
+

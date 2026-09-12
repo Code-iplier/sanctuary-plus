@@ -48,6 +48,16 @@ export interface ClinicalExtraction {
   rawExtractionJson?: string;
 }
 
+export interface SoapNote {
+  subjective: string;
+  objective: string;
+  assessment: string;
+  plan: string;
+  generatedAt?: string;
+  reviewedAt?: string;
+  isReviewed?: boolean;
+}
+
 export interface ClinicalEncounter {
   id: string;
   patientId: string;
@@ -62,6 +72,7 @@ export interface ClinicalEncounter {
   reviewedAt?: string;
   reviewedByClinicianId?: string;
   extraction?: ClinicalExtraction;
+  soapNote?: SoapNote;
   createdAt: string;
   updatedAt: string;
 }
@@ -100,6 +111,19 @@ const INITIAL_ENCOUNTERS: ClinicalEncounter[] = [
       history: ['Coronary artery disease', 'Hypertension'],
       extractedAt: new Date(Date.now() - 3600000).toISOString(),
     },
+    soapNote: {
+      subjective:
+        'Patient is a 58-year-old male who presents with sudden onset crushing substernal chest pressure while walking up stairs, radiating to the left arm. Associated with diaphoresis and acute shortness of breath. Reports allergy to Penicillin (hives).',
+      objective:
+        'Alert, visibly diaphoretic and in moderate distress. Vitals: BP 142/88 mmHg, HR 98 bpm, SpO2 96% on room air. Cardiopulmonary exam notable for tachypnea without focal rales.',
+      assessment:
+        'Acute coronary syndrome presentation vs acute myocardial ischemia with exertional onset and autonomic symptoms in a patient with hypertension.',
+      plan:
+        'Immediate 12-lead ECG and stat cardiac troponin markers. Administer chewed aspirin 324mg and establish IV access. Continuous telemetry monitoring. Cardiology consult requested.',
+      generatedAt: new Date(Date.now() - 3400000).toISOString(),
+      reviewedAt: new Date(Date.now() - 3300000).toISOString(),
+      isReviewed: true,
+    },
     createdAt: new Date(Date.now() - 7200000).toISOString(),
     updatedAt: new Date(Date.now() - 3600000).toISOString(),
   },
@@ -124,6 +148,19 @@ const INITIAL_ENCOUNTERS: ClinicalEncounter[] = [
       allergies: ['No known drug allergies (NKDA)'],
       history: ['Essential hypertension'],
       extractedAt: new Date(Date.now() - 82800000).toISOString(),
+    },
+    soapNote: {
+      subjective:
+        'Patient is a 45-year-old female presenting for routine outpatient follow-up of essential hypertension. Reports feeling well with no headaches, visual disturbances, chest discomfort, or dizziness.',
+      objective:
+        'Well-appearing, resting comfortably. Vitals: BP 125/80 mmHg, HR 72 bpm regular. Physical examination unremarkable.',
+      assessment:
+        'Essential hypertension, well-controlled on current medical therapy without end-organ symptoms.',
+      plan:
+        'Continue Lisinopril 20mg orally once daily with morning meal. Encourage low-sodium diet and regular aerobic exercise. Routine metabolic panel in 6 months. Follow-up clinic visit in 6 months.',
+      generatedAt: new Date(Date.now() - 82600000).toISOString(),
+      reviewedAt: new Date(Date.now() - 82500000).toISOString(),
+      isReviewed: true,
     },
     createdAt: new Date(Date.now() - 86400000).toISOString(),
     updatedAt: new Date(Date.now() - 82800000).toISOString(),
@@ -154,6 +191,16 @@ export default function DocumentationPage() {
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [isSavingExtraction, setIsSavingExtraction] = useState<boolean>(false);
   const [isEditingExtraction, setIsEditingExtraction] = useState<boolean>(false);
+
+  // Phase 4: Structured SOAP Note state
+  const [soapNote, setSoapNote] = useState<SoapNote | null>(null);
+  const [isGeneratingSoap, setIsGeneratingSoap] = useState<boolean>(false);
+  const [isSavingSoap, setIsSavingSoap] = useState<boolean>(false);
+  const [isEditingSoap, setIsEditingSoap] = useState<boolean>(false);
+  const [soapSubjective, setSoapSubjective] = useState<string>('');
+  const [soapObjective, setSoapObjective] = useState<string>('');
+  const [soapAssessment, setSoapAssessment] = useState<string>('');
+  const [soapPlan, setSoapPlan] = useState<string>('');
 
   // New item inputs for each category in extraction editor
   const [newSymptom, setNewSymptom] = useState<string>('');
@@ -188,12 +235,18 @@ export default function DocumentationPage() {
   const activeEncounter =
     encounters.find((e) => e.id === selectedEncounterId) || encounters[0];
 
-  // Load active encounter transcript & extraction into editor
+  // Load active encounter transcript, extraction & SOAP into editor
   useEffect(() => {
     if (activeEncounter) {
       setEditableTranscript(activeEncounter.rawTranscript || '');
       setExtraction(activeEncounter.extraction || null);
       setIsEditingExtraction(false);
+      setSoapNote(activeEncounter.soapNote || null);
+      setSoapSubjective(activeEncounter.soapNote?.subjective || '');
+      setSoapObjective(activeEncounter.soapNote?.objective || '');
+      setSoapAssessment(activeEncounter.soapNote?.assessment || '');
+      setSoapPlan(activeEncounter.soapNote?.plan || '');
+      setIsEditingSoap(false);
       setAudioBlob(null);
       setAudioUrl(null);
       setUploadedFileName(null);
@@ -670,6 +723,157 @@ export default function DocumentationPage() {
     setNewVitalUnit('');
   };
 
+  // Real Phase 4: Generate Structured SOAP Note from Transcript & Extraction
+  const handleGenerateSoapNote = async () => {
+    const transcriptText = editableTranscript.trim();
+    if (!transcriptText || transcriptText.length < 10) {
+      setAlertInfo({
+        type: 'warning',
+        message:
+          'Transcript is too short or empty for SOAP note generation. Please provide consultation text first.',
+      });
+      return;
+    }
+
+    setIsGeneratingSoap(true);
+    setAlertInfo(null);
+
+    try {
+      // Ensure backend has current transcript if modified
+      if (editableTranscript !== activeEncounter.rawTranscript) {
+        await fetch(`/api/encounters/${activeEncounter.id}/transcript`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transcript: editableTranscript,
+            clinicianId: activeEncounter.clinicianId || 'doc-smith',
+          }),
+        });
+      }
+
+      const response = await fetch(
+        `/api/encounters/${activeEncounter.id}/soap/generate`,
+        {
+          method: 'POST',
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `SOAP note generation failed (HTTP ${response.status})`,
+        );
+      }
+
+      const generatedNote: SoapNote = await response.json();
+      setSoapNote(generatedNote);
+      setSoapSubjective(generatedNote.subjective);
+      setSoapObjective(generatedNote.objective);
+      setSoapAssessment(generatedNote.assessment);
+      setSoapPlan(generatedNote.plan);
+      setIsEditingSoap(false);
+
+      // Update in encounters list
+      setEncounters((prev) =>
+        prev.map((enc) =>
+          enc.id === activeEncounter.id
+            ? {
+                ...enc,
+                soapNote: generatedNote,
+                rawTranscript: editableTranscript,
+                updatedAt: new Date().toISOString(),
+              }
+            : enc,
+        ),
+      );
+
+      setAlertInfo({
+        type: 'success',
+        message:
+          'Structured SOAP clinical progress note successfully synthesized with Gemini. Review and edit sections below.',
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAlertInfo({
+        type: 'danger',
+        message: `SOAP generation failed: ${error.message}`,
+      });
+    } finally {
+      setIsGeneratingSoap(false);
+    }
+  };
+
+  // Save clinician-reviewed SOAP note
+  const handleSaveSoapNote = async () => {
+    if (
+      !soapSubjective.trim() &&
+      !soapObjective.trim() &&
+      !soapAssessment.trim() &&
+      !soapPlan.trim()
+    ) {
+      setAlertInfo({
+        type: 'warning',
+        message: 'Cannot save an empty SOAP note.',
+      });
+      return;
+    }
+
+    setIsSavingSoap(true);
+    setAlertInfo(null);
+
+    const updatedNote: SoapNote = {
+      subjective: soapSubjective.trim(),
+      objective: soapObjective.trim(),
+      assessment: soapAssessment.trim(),
+      plan: soapPlan.trim(),
+      generatedAt: soapNote?.generatedAt || new Date().toISOString(),
+      reviewedAt: new Date().toISOString(),
+      isReviewed: true,
+    };
+
+    try {
+      const response = await fetch(
+        `/api/encounters/${activeEncounter.id}/soap`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ soapNote: updatedNote }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `Failed to save SOAP note (HTTP ${response.status})`,
+        );
+      }
+
+      const updatedEncounter: ClinicalEncounter = await response.json();
+      setEncounters((prev) =>
+        prev.map((enc) =>
+          enc.id === activeEncounter.id ? updatedEncounter : enc,
+        ),
+      );
+      setSoapNote(updatedEncounter.soapNote || updatedNote);
+      setIsEditingSoap(false);
+
+      setAlertInfo({
+        type: 'success',
+        message: `SOAP clinical note reviewed and saved successfully for Encounter ${activeEncounter.id}.`,
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAlertInfo({
+        type: 'danger',
+        message: `Failed to save SOAP note: ${error.message}`,
+      });
+    } finally {
+      setIsSavingSoap(false);
+    }
+  };
+
   const formatSeconds = (sec: number) => {
     const m = Math.floor(sec / 60)
       .toString()
@@ -707,7 +911,7 @@ export default function DocumentationPage() {
               </Badge>
             </div>
             <p className="text-sm text-gray-500 mt-1">
-              Phases 2 & 3: Consultation Audio Transcription & Clinical Information Extraction
+              Phases 2, 3 & 4: Audio Transcription, Clinical Extraction & Structured SOAP Notes
             </p>
           </div>
 
@@ -952,6 +1156,25 @@ export default function DocumentationPage() {
                       <>
                         <Sparkles size={16} />
                         Extract Clinical Information
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    variant="primary"
+                    onPress={handleGenerateSoapNote}
+                    isDisabled={isGeneratingSoap || !editableTranscript.trim()}
+                    className="flex items-center gap-1.5 bg-gradient-to-r from-primary to-indigo-600 text-white"
+                  >
+                    {isGeneratingSoap ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin" />
+                        Synthesizing SOAP...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={16} />
+                        Generate SOAP Note
                       </>
                     )}
                   </Button>
@@ -1427,6 +1650,275 @@ export default function DocumentationPage() {
                       </button>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Step 4: Structured SOAP Clinical Progress Note */}
+          <Card className="p-5 mt-4 flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-gray-200 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-semibold">
+                      4. Structured SOAP Clinical Progress Note
+                    </h3>
+                    {soapNote ? (
+                      soapNote.isReviewed ? (
+                        <Badge color="success" variant="soft">
+                          Clinician Reviewed
+                        </Badge>
+                      ) : (
+                        <Badge color="warning" variant="soft">
+                          AI Draft (Unreviewed)
+                        </Badge>
+                      )
+                    ) : (
+                      <Badge color="default" variant="soft">
+                        Awaiting Synthesis
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Standardized four-quadrant clinical progress documentation synthesized from consultation dialogue and verified extraction facts.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {soapNote && (
+                  <>
+                    {!isEditingSoap ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => setIsEditingSoap(true)}
+                        className="flex items-center gap-1.5 text-xs"
+                      >
+                        <Edit3 size={14} />
+                        Edit Note
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onPress={() => {
+                            if (activeEncounter.soapNote) {
+                              setSoapSubjective(activeEncounter.soapNote.subjective);
+                              setSoapObjective(activeEncounter.soapNote.objective);
+                              setSoapAssessment(activeEncounter.soapNote.assessment);
+                              setSoapPlan(activeEncounter.soapNote.plan);
+                            }
+                            setIsEditingSoap(false);
+                          }}
+                          className="flex items-center gap-1 text-xs"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onPress={handleSaveSoapNote}
+                          isDisabled={isSavingSoap}
+                          className="flex items-center gap-1.5 text-xs"
+                        >
+                          <Save size={14} />
+                          {isSavingSoap ? 'Saving...' : 'Save SOAP Note'}
+                        </Button>
+                      </>
+                    )}
+                  </>
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={handleGenerateSoapNote}
+                  isDisabled={isGeneratingSoap || !editableTranscript.trim()}
+                  className="flex items-center gap-1.5 text-xs"
+                >
+                  {isGeneratingSoap ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      Synthesizing...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={14} />
+                      {soapNote ? 'Re-synthesize with Gemini' : 'Generate SOAP Note'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {!soapNote ? (
+              <div className="p-8 rounded-xl border border-dashed border-gray-300 dark:border-zinc-700 flex flex-col items-center justify-center text-center gap-2">
+                <FileText size={32} className="text-gray-400" />
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                  No SOAP note generated for this encounter yet.
+                </p>
+                <p className="text-xs text-gray-500 max-w-md">
+                  Synthesize the reviewed consultation dialogue and extracted clinical entities into standardized Subjective, Objective, Assessment, and Plan documentation using Gemini.
+                </p>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onPress={handleGenerateSoapNote}
+                  isDisabled={isGeneratingSoap || !editableTranscript.trim()}
+                  className="mt-2 flex items-center gap-1.5"
+                >
+                  <Sparkles size={14} />
+                  Generate SOAP Note with Gemini
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Subjective (S) */}
+                  <div className="p-4 rounded-xl border border-sky-200 dark:border-sky-900/50 bg-sky-50/40 dark:bg-sky-950/20 flex flex-col gap-2">
+                    <div className="flex items-center justify-between pb-1 border-b border-sky-200/60 dark:border-sky-900/40">
+                      <span className="text-xs font-bold text-sky-800 dark:text-sky-300 tracking-wider uppercase flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-sky-600 text-white flex items-center justify-center text-[11px] font-bold">
+                          S
+                        </span>
+                        Subjective
+                      </span>
+                      <span className="text-[11px] text-gray-500">Chief Complaint & HPI</span>
+                    </div>
+                    {isEditingSoap ? (
+                      <textarea
+                        value={soapSubjective}
+                        onChange={(e) => setSoapSubjective(e.target.value)}
+                        placeholder="Patient's reported symptoms, chronology, and complaints..."
+                        className="w-full min-h-[140px] p-2.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-sky-500 leading-relaxed resize-y"
+                      />
+                    ) : (
+                      <p className="text-xs text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-line min-h-[100px]">
+                        {soapSubjective || <span className="italic text-gray-400">No subjective notes</span>}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Objective (O) */}
+                  <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/40 dark:bg-emerald-950/20 flex flex-col gap-2">
+                    <div className="flex items-center justify-between pb-1 border-b border-emerald-200/60 dark:border-emerald-900/40">
+                      <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 tracking-wider uppercase flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-bold">
+                          O
+                        </span>
+                        Objective
+                      </span>
+                      <span className="text-[11px] text-gray-500">Exam, Vitals & Observations</span>
+                    </div>
+                    {isEditingSoap ? (
+                      <textarea
+                        value={soapObjective}
+                        onChange={(e) => setSoapObjective(e.target.value)}
+                        placeholder="Physical exam observations, vital signs, physical state..."
+                        className="w-full min-h-[140px] p-2.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed resize-y"
+                      />
+                    ) : (
+                      <p className="text-xs text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-line min-h-[100px]">
+                        {soapObjective || <span className="italic text-gray-400">No objective notes</span>}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Assessment (A) */}
+                  <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 flex flex-col gap-2">
+                    <div className="flex items-center justify-between pb-1 border-b border-amber-200/60 dark:border-amber-900/40">
+                      <span className="text-xs font-bold text-amber-800 dark:text-amber-300 tracking-wider uppercase flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center text-[11px] font-bold">
+                          A
+                        </span>
+                        Assessment
+                      </span>
+                      <span className="text-[11px] text-gray-500">Clinical Status Evaluation</span>
+                    </div>
+                    {isEditingSoap ? (
+                      <textarea
+                        value={soapAssessment}
+                        onChange={(e) => setSoapAssessment(e.target.value)}
+                        placeholder="Clinical synthesis of patient status during encounter..."
+                        className="w-full min-h-[140px] p-2.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500 leading-relaxed resize-y"
+                      />
+                    ) : (
+                      <p className="text-xs text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-line min-h-[100px]">
+                        {soapAssessment || <span className="italic text-gray-400">No assessment documented</span>}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Plan (P) */}
+                  <div className="p-4 rounded-xl border border-purple-200 dark:border-purple-900/50 bg-purple-50/40 dark:bg-purple-950/20 flex flex-col gap-2">
+                    <div className="flex items-center justify-between pb-1 border-b border-purple-200/60 dark:border-purple-900/40">
+                      <span className="text-xs font-bold text-purple-800 dark:text-purple-300 tracking-wider uppercase flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-[11px] font-bold">
+                          P
+                        </span>
+                        Plan
+                      </span>
+                      <span className="text-[11px] text-gray-500">Management & Follow-up</span>
+                    </div>
+                    {isEditingSoap ? (
+                      <textarea
+                        value={soapPlan}
+                        onChange={(e) => setSoapPlan(e.target.value)}
+                        placeholder="Care plan, ongoing medications, orders, counseling, and follow-up timeline..."
+                        className="w-full min-h-[140px] p-2.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-purple-500 leading-relaxed resize-y"
+                      />
+                    ) : (
+                      <p className="text-xs text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-line min-h-[100px]">
+                        {soapPlan || <span className="italic text-gray-400">No plan documented</span>}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer Review Status & Actions */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-gray-200 dark:border-zinc-800">
+                  <div className="text-xs text-gray-500 flex items-center gap-2">
+                    <User size={14} />
+                    <span>Attending: {activeEncounter.clinicianId || 'doc-smith'}</span>
+                    {soapNote.reviewedAt && (
+                      <span>
+                        • Last Saved:{' '}
+                        {new Date(soapNote.reviewedAt).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isEditingSoap ? (
+                      <Button
+                        variant="primary"
+                        onPress={handleSaveSoapNote}
+                        isDisabled={isSavingSoap}
+                        className="flex items-center gap-1.5 text-xs"
+                      >
+                        <Save size={14} />
+                        {isSavingSoap ? 'Saving...' : 'Save & Verify SOAP Note'}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => setIsEditingSoap(true)}
+                        className="flex items-center gap-1.5 text-xs"
+                      >
+                        <Edit3 size={14} />
+                        Edit SOAP Sections
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

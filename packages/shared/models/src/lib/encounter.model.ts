@@ -31,6 +31,16 @@ export interface ClinicalExtraction {
   extractedAt?: string;
 }
 
+export interface SoapNote {
+  subjective: string;
+  objective: string;
+  assessment: string;
+  plan: string;
+  generatedAt?: string;
+  reviewedAt?: string;
+  isReviewed?: boolean;
+}
+
 export interface ClinicalEncounter {
   id: string;
   patientId: string;
@@ -45,6 +55,7 @@ export interface ClinicalEncounter {
   reviewedAt?: string;
   reviewedByClinicianId?: string;
   extraction?: ClinicalExtraction;
+  soapNote?: SoapNote;
   createdAt: string;
   updatedAt: string;
 }
@@ -57,6 +68,7 @@ export interface CreateEncounterDto {
   audioDurationSeconds?: number;
   transcriptConfidence?: number;
   extraction?: ClinicalExtraction;
+  soapNote?: SoapNote;
 }
 
 export interface UpdateEncounterDto {
@@ -68,6 +80,7 @@ export interface UpdateEncounterDto {
   transcriptConfidence?: number;
   transcriptReviewed?: boolean;
   extraction?: ClinicalExtraction;
+  soapNote?: SoapNote;
 }
 
 export interface TranscribeAudioDto {
@@ -94,3 +107,8 @@ export interface UpdateTranscriptDto {
 export interface UpdateExtractionDto {
   extraction: ClinicalExtraction;
 }
+
+export interface UpdateSoapNoteDto {
+  soapNote: SoapNote;
+}
+

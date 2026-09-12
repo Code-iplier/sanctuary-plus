@@ -9,6 +9,8 @@ import type {
   TranscribeAudioDto,
   UpdateTranscriptDto,
   UpdateExtractionDto,
+  SoapNote,
+  UpdateSoapNoteDto,
 } from './documentation.types';
 
 describe('DocumentationController', () => {
@@ -37,6 +39,15 @@ describe('DocumentationController', () => {
     extractedAt: '2026-09-13T00:00:00.000Z',
   };
 
+  const mockSoapNote: SoapNote = {
+    subjective: 'Patient reports cough and fever.',
+    objective: 'Mild wheezing on lung auscultation. BP 120/80.',
+    assessment: 'Acute bronchitis vs viral URI.',
+    plan: 'Rest and hydration.',
+    generatedAt: '2026-09-13T00:00:00.000Z',
+    isReviewed: false,
+  };
+
   beforeEach(() => {
     service = {
       getEncounters: vi.fn().mockResolvedValue([mockEncounter]),
@@ -59,6 +70,11 @@ describe('DocumentationController', () => {
       updateExtraction: vi.fn().mockResolvedValue({
         ...mockEncounter,
         extraction: mockExtraction,
+      }),
+      generateSoapNote: vi.fn().mockResolvedValue(mockSoapNote),
+      updateSoapNote: vi.fn().mockResolvedValue({
+        ...mockEncounter,
+        soapNote: mockSoapNote,
       }),
     } as unknown as DocumentationService;
 
@@ -122,4 +138,18 @@ describe('DocumentationController', () => {
     expect(result.extraction).toEqual(mockExtraction);
     expect(service.updateExtraction).toHaveBeenCalledWith('enc-101', mockExtraction);
   });
+
+  it('should generate SOAP note (Phase 4)', async () => {
+    const result = await controller.generateSoapNote('enc-101');
+    expect(result).toEqual(mockSoapNote);
+    expect(service.generateSoapNote).toHaveBeenCalledWith('enc-101');
+  });
+
+  it('should update SOAP note (Phase 4)', async () => {
+    const dto: UpdateSoapNoteDto = { soapNote: mockSoapNote };
+    const result = await controller.updateSoapNote('enc-101', dto);
+    expect(result.soapNote).toEqual(mockSoapNote);
+    expect(service.updateSoapNote).toHaveBeenCalledWith('enc-101', mockSoapNote);
+  });
 });
+

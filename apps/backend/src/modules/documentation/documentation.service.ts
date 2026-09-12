@@ -11,9 +11,11 @@ import type {
   TranscribeAudioDto,
   TranscriptionResponseDto,
   ClinicalExtraction,
+  SoapNote,
 } from './documentation.types';
 import { TranscriptionProvider } from './transcription.provider';
 import { ExtractionProvider } from './extraction.provider';
+import { SoapProvider } from './soap.provider';
 
 @Injectable()
 export class DocumentationService {
@@ -25,6 +27,7 @@ export class DocumentationService {
   constructor(
     private readonly transcriptionProvider: TranscriptionProvider,
     private readonly extractionProvider: ExtractionProvider,
+    private readonly soapProvider: SoapProvider,
   ) {
     this.seedInitialEncounters();
   }
@@ -67,6 +70,19 @@ export class DocumentationService {
           history: ['Hypertension for 5 years'],
           extractedAt: new Date(Date.now() - 3500000).toISOString(),
         },
+        soapNote: {
+          subjective:
+            'Patient is a 58-year-old male who presents with sudden onset crushing substernal chest pressure while walking up stairs, radiating to the left arm. Associated with diaphoresis and acute shortness of breath. Reports allergy to Penicillin (hives).',
+          objective:
+            'Alert, visibly diaphoretic and in moderate distress. Vitals: BP 164/98 mmHg, HR 102 bpm, SpO2 94% on room air. Cardiopulmonary exam notable for tachypnea without focal rales.',
+          assessment:
+            'Acute coronary syndrome presentation vs acute myocardial ischemia with exertional onset and autonomic symptoms in a patient with hypertension.',
+          plan:
+            'Immediate 12-lead ECG and stat cardiac troponin markers. Administer chewed aspirin 324mg and establish IV access. Continuous cardiac telemetry monitoring. Cardiology consult requested.',
+          generatedAt: new Date(Date.now() - 3400000).toISOString(),
+          reviewedAt: new Date(Date.now() - 3300000).toISOString(),
+          isReviewed: true,
+        },
         createdAt: new Date(Date.now() - 7200000).toISOString(),
         updatedAt: new Date(Date.now() - 3600000).toISOString(),
       },
@@ -96,6 +112,19 @@ export class DocumentationService {
           allergies: [],
           history: ['Essential hypertension'],
           extractedAt: new Date(Date.now() - 82700000).toISOString(),
+        },
+        soapNote: {
+          subjective:
+            'Patient is a 45-year-old female presenting for routine outpatient follow-up of essential hypertension. Reports feeling well with no headaches, visual disturbances, chest discomfort, or dizziness.',
+          objective:
+            'Well-appearing, resting comfortably. Vitals: BP 125/80 mmHg, HR 72 bpm regular. Physical examination unremarkable.',
+          assessment:
+            'Essential hypertension, well-controlled on current medical therapy without end-organ symptoms.',
+          plan:
+            'Continue Lisinopril 20mg orally once daily with morning meal. Encourage low-sodium diet and regular aerobic exercise. Routine metabolic panel in 6 months. Follow-up clinic visit in 6 months.',
+          generatedAt: new Date(Date.now() - 82600000).toISOString(),
+          reviewedAt: new Date(Date.now() - 82500000).toISOString(),
+          isReviewed: true,
         },
         createdAt: new Date(Date.now() - 86400000).toISOString(),
         updatedAt: new Date(Date.now() - 82800000).toISOString(),
@@ -160,6 +189,7 @@ export class DocumentationService {
       transcriptConfidence: dto.transcriptConfidence || 0,
       transcriptReviewed: false,
       extraction: dto.extraction,
+      soapNote: dto.soapNote,
       createdAt: now,
       updatedAt: now,
     };
@@ -196,6 +226,7 @@ export class DocumentationService {
           ? dto.transcriptReviewed
           : encounter.transcriptReviewed,
       extraction: dto.extraction !== undefined ? dto.extraction : encounter.extraction,
+      soapNote: dto.soapNote !== undefined ? dto.soapNote : encounter.soapNote,
       updatedAt: now,
     };
 
@@ -313,6 +344,53 @@ export class DocumentationService {
 
     this.encounters.set(id, encounter);
     this.logger.log(`Updated clinical extraction for encounter ${id}`);
+    return encounter;
+  }
+
+  async generateSoapNote(id: string): Promise<SoapNote> {
+    const encounter = await this.getEncounterById(id);
+
+    if (!encounter.rawTranscript || encounter.rawTranscript.trim().length < 10) {
+      throw new BadRequestException(
+        'Encounter transcript is empty or too short for SOAP note generation. Please transcribe consultation audio first.',
+      );
+    }
+
+    this.logger.log(
+      `Synthesizing SOAP note for encounter ${id} (transcript length: ${encounter.rawTranscript.length})`,
+    );
+
+    const soapNote = await this.soapProvider.generateSoapNote(
+      encounter.rawTranscript,
+      encounter.extraction,
+    );
+
+    const now = new Date().toISOString();
+    encounter.soapNote = soapNote;
+    encounter.updatedAt = now;
+
+    this.encounters.set(id, encounter);
+    this.logger.log(`Encounter ${id} updated with generated SOAP note`);
+
+    return soapNote;
+  }
+
+  async updateSoapNote(
+    id: string,
+    soapNote: SoapNote,
+  ): Promise<ClinicalEncounter> {
+    const encounter = await this.getEncounterById(id);
+    const now = new Date().toISOString();
+
+    encounter.soapNote = {
+      ...soapNote,
+      reviewedAt: now,
+      isReviewed: true,
+    };
+    encounter.updatedAt = now;
+
+    this.encounters.set(id, encounter);
+    this.logger.log(`Updated and reviewed SOAP note for encounter ${id}`);
     return encounter;
   }
 }

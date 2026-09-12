@@ -9,6 +9,7 @@ import {
   ExtractionProvider,
   GeminiExtractionProvider,
 } from './extraction.provider';
+import { SoapProvider, GeminiSoapProvider } from './soap.provider';
 
 @Module({
   controllers: [DocumentationController],
@@ -22,7 +23,17 @@ import {
       provide: ExtractionProvider,
       useClass: GeminiExtractionProvider,
     },
+    {
+      provide: SoapProvider,
+      useClass: GeminiSoapProvider,
+    },
   ],
-  exports: [DocumentationService, TranscriptionProvider, ExtractionProvider],
+  exports: [
+    DocumentationService,
+    TranscriptionProvider,
+    ExtractionProvider,
+    SoapProvider,
+  ],
 })
 export class DocumentationModule {}
+
