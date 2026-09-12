@@ -102,3 +102,15 @@ tr:hover {
   background-color: #16a34a;
   color: #ffffff;
 }
+
+/* Ensure standalone badges in cards and tiles stay strictly contained */
+.badge:not(.badge-anchor .badge),
+.badge--contained,
+[data-slot="badge"]:not(.badge-anchor [data-slot="badge"]) {
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+}

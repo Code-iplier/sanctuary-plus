@@ -1,9 +1,7 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
-  NotFoundException,
   Param,
   Patch,
   Post,

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Users,
+  Pill,
   FileText,
   Shield,
   Heart,
@@ -18,11 +19,14 @@ import {
   ArrowRight,
   Stethoscope,
   HeartPulse,
+  Menu,
+  RadioTower,
 } from 'lucide-react';
 import QueuePage from './pages/QueuePage';
 import DocumentationPage from './pages/DocumentationPage';
 import MedicationsPage from './pages/MedicationsPage';
 import RiskPage from './pages/RiskPage';
+import WardSyncPage from './pages/WardSyncPage';
 import ChronosPage from './pages/ChronosPage';
 import DashboardPage from './pages/DashboardPage';
 import { findPatientByPhone, registerPatient, fetchBootstrap } from './queue/api';
@@ -59,6 +63,7 @@ const STAFF_NAV_ITEMS = [
   { id: 'documentation', label: 'Documentation', icon: FileText, desc: 'TipTap Clinical Notes' },
   { id: 'medications', label: 'Medications', icon: Shield, desc: 'RxNorm & Interactions' },
   { id: 'risk', label: 'Risk Assessment', icon: Heart, desc: 'ASCVD / LACE Score' },
+  { id: 'wardsync', label: 'WardSync', icon: RadioTower, desc: 'Ward Deterioration & Flowsheet' },
   { id: 'chronos', label: 'Chronos ICU', icon: Activity, desc: 'Early Warning Engine' },
 ] as const;
 
@@ -264,11 +269,10 @@ export default function App() {
                   setAuthError(null);
                   setIsRegistering(false);
                 }}
-                className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${
-                  authTab === 'patient'
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${authTab === 'patient'
                     ? 'bg-white text-teal-800 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
-                }`}
+                  }`}
               >
                 <User className="h-4 w-4 text-teal-600" />
                 <span>Patient Portal</span>
@@ -279,11 +283,10 @@ export default function App() {
                   setAuthTab('staff');
                   setAuthError(null);
                 }}
-                className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${
-                  authTab === 'staff'
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${authTab === 'staff'
                     ? 'bg-white text-teal-800 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
-                }`}
+                  }`}
               >
                 <ShieldCheck className="h-4 w-4 text-teal-600" />
                 <span>Staff & Clinicians</span>
@@ -617,12 +620,12 @@ export default function App() {
   }
 
   /* ========================================================================
-   * 3. STAFF SESSION: FULL PLATFORM ACCESS (ALL 6 MODULES)
+   * 3. STAFF SESSION: FULL PLATFORM ACCESS (ALL 7 MODULES)
    * ======================================================================== */
   const renderPanel = () => {
     switch (activePanel) {
       case 'dashboard':
-        return <DashboardPage />;
+        return <DashboardPage onNavigate={setActivePanel} />;
       case 'queue':
         return <QueuePage session={session} onLogout={handleLogout} onSessionChange={setSession} />;
       case 'documentation':
@@ -631,6 +634,8 @@ export default function App() {
         return <MedicationsPage />;
       case 'risk':
         return <RiskPage />;
+      case 'wardsync':
+        return <WardSyncPage />;
       case 'chronos':
         return <ChronosPage />;
       default:
@@ -700,11 +705,10 @@ export default function App() {
                   key={item.id}
                   type="button"
                   onClick={() => setActivePanel(item.id)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
-                    isActive
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${isActive
                       ? 'bg-teal-700 text-white shadow-sm'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
+                    }`}
                 >
                   <Icon className={`h-4 w-4 ${isActive ? 'text-teal-200' : 'text-slate-400'}`} />
                   <span>{item.label}</span>
