@@ -9,11 +9,32 @@
   --hero-color-secondary-foreground: #ffffff;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  overflow-x: hidden;
+}
+
 /* Light mode default - clinical interface */
 body {
+  margin: 0;
+  min-width: 320px;
+  overflow-x: hidden;
   font-family: 'Inter', 'system-ui', sans-serif;
   background-color: #f8f9fa;
   color: #1e293b;
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
 }
 
 /* Custom component overrides for healthcare */

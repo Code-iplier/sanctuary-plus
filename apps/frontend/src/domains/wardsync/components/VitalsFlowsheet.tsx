@@ -140,7 +140,7 @@ export default function VitalsFlowsheet({
 
         {patientView && patientView.vitals.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="min-w-[720px] w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
                 <tr>
                   <th className="p-2">Obs Time</th>

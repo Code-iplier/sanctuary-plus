@@ -28,7 +28,7 @@ export default function DocumentationPage() {
   return (
     <div className="flex flex-col gap-4">
       <Card className="p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold">
               Automated Clinical Documentation
@@ -44,7 +44,10 @@ export default function DocumentationPage() {
       </Card>
 
       <Tabs defaultSelectedKey="notes">
-        <Tabs.List aria-label="Documentation sections">
+        <Tabs.List
+          aria-label="Documentation sections"
+          className="flex flex-wrap gap-1"
+        >
           <Tabs.Tab id="notes">
             <span className="inline-flex items-center gap-1">
               <FileText size={16} /> Notes

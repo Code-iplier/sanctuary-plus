@@ -86,7 +86,6 @@ interface DashboardPageProps {
       | 'queue'
       | 'documentation'
       | 'medications'
-      | 'risk'
       | 'wardsync'
       | 'chronos',
   ) => void;
@@ -106,7 +105,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   return (
     <div className="flex flex-col gap-4">
       <Card className="p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold">Hospital Dashboard</h2>
             <p className="text-sm text-gray-500">
@@ -138,10 +137,12 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
       </div>
 
       <Tabs defaultSelectedKey="overview">
-        <Tabs.List aria-label="Dashboard sections">
+        <Tabs.List
+          aria-label="Dashboard sections"
+          className="flex flex-wrap gap-1"
+        >
           <Tabs.Tab id="overview">Overview</Tabs.Tab>
           <Tabs.Tab id="queue">Queue</Tabs.Tab>
-          <Tabs.Tab id="risk">Risk</Tabs.Tab>
           <Tabs.Tab id="wardsync">WardSync</Tabs.Tab>
           <Tabs.Tab id="chronos">Chronos</Tabs.Tab>
         </Tabs.List>
@@ -186,31 +187,6 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                 </Button>
               )}
             </div>
-          </Card>
-        </Tabs.Panel>
-
-        <Tabs.Panel id="risk">
-          <Card className="p-4 mt-3">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-medium">Risk Overview</h3>
-              {onNavigate && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onPress={() => onNavigate('risk')}
-                  className="text-xs"
-                >
-                  Open Risk Assessment <ArrowRight size={14} className="ml-1" />
-                </Button>
-              )}
-            </div>
-            <ProgressBar
-              value={85}
-              maxValue={100}
-              color="danger"
-              className="mt-2"
-            />
-            <p className="text-xs text-gray-500 mt-1">85% critical risk</p>
           </Card>
         </Tabs.Panel>
 

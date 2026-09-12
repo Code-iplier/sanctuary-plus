@@ -254,7 +254,7 @@ export default function ReceptionTriageConsole({ snapshot, onRefresh }: Receptio
 
         {/* Table Content */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
+          <table className="min-w-[900px] w-full text-left text-xs text-slate-700">
             <thead className="bg-slate-50 text-[11px] uppercase font-bold tracking-wider text-slate-500 border-b border-slate-200">
               <tr>
                 <th className="py-3 px-4">Token</th>

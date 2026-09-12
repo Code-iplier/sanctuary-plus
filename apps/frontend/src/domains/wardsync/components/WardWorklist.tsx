@@ -210,7 +210,8 @@ export default function WardWorklist({
 
       {/* Ward Triage Table */}
       <Card className="p-0 overflow-hidden">
-        <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto">
+        <table className="min-w-[900px] w-full text-left text-sm">
           <thead className="bg-gray-50 text-gray-600 border-b border-gray-200">
             <tr>
               <th className="p-3">Patient &amp; Bed</th>
@@ -295,6 +296,7 @@ export default function WardWorklist({
             })}
           </tbody>
         </table>
+        </div>
       </Card>
     </div>
   );

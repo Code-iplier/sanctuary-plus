@@ -130,8 +130,8 @@ export const QueuePage: React.FC<QueuePageProps> = ({ session, onLogout }) => {
     return (
       <div className="space-y-6">
         {/* Patient Sub-navigation */}
-        <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setPatientViewMode('active')}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
@@ -172,7 +172,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({ session, onLogout }) => {
             )}
           </div>
 
-          <div className="text-xs text-slate-400">
+          <div className="max-w-full truncate text-xs text-slate-400">
             Hospital System ID: <span className="font-mono font-medium text-slate-600 dark:text-slate-300">{patientId}</span>
           </div>
         </div>
