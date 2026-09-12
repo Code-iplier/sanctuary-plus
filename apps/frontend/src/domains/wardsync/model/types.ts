@@ -270,4 +270,3 @@ export function formatMinutesAge(minutes: number): string {
   const remainingHours = Math.floor((minutes % 1440) / 60);
   return remainingHours === 0 ? `${days}d ago` : `${days}d ${remainingHours}h ago`;
 }
-

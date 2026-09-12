@@ -86,6 +86,7 @@ interface DashboardPageProps {
       | 'queue'
       | 'documentation'
       | 'medications'
+      | 'risk'
       | 'wardsync'
       | 'chronos',
   ) => void;
@@ -140,6 +141,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         <Tabs.List aria-label="Dashboard sections">
           <Tabs.Tab id="overview">Overview</Tabs.Tab>
           <Tabs.Tab id="queue">Queue</Tabs.Tab>
+          <Tabs.Tab id="risk">Risk</Tabs.Tab>
           <Tabs.Tab id="wardsync">WardSync</Tabs.Tab>
           <Tabs.Tab id="chronos">Chronos</Tabs.Tab>
         </Tabs.List>
@@ -166,10 +168,49 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
         <Tabs.Panel id="queue">
           <Card className="p-4 mt-3">
-            <h3 className="font-medium">Patient Queue</h3>
-            <p className="text-sm text-gray-500">
-              47 patients currently in queue
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-medium">Patient Queue</h3>
+                <p className="text-sm text-gray-500">
+                  47 patients currently in queue
+                </p>
+              </div>
+              {onNavigate && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onPress={() => onNavigate('queue')}
+                  className="text-xs"
+                >
+                  Open Queue <ArrowRight size={14} className="ml-1" />
+                </Button>
+              )}
+            </div>
+          </Card>
+        </Tabs.Panel>
+
+        <Tabs.Panel id="risk">
+          <Card className="p-4 mt-3">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">Risk Overview</h3>
+              {onNavigate && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onPress={() => onNavigate('risk')}
+                  className="text-xs"
+                >
+                  Open Risk Assessment <ArrowRight size={14} className="ml-1" />
+                </Button>
+              )}
+            </div>
+            <ProgressBar
+              value={85}
+              maxValue={100}
+              color="danger"
+              className="mt-2"
+            />
+            <p className="text-xs text-gray-500 mt-1">85% critical risk</p>
           </Card>
         </Tabs.Panel>
 
@@ -241,7 +282,19 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
         <Tabs.Panel id="chronos">
           <Card className="p-4 mt-3">
-            <h3 className="font-medium">ICU Early Warning</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">ICU Early Warning</h3>
+              {onNavigate && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onPress={() => onNavigate('chronos')}
+                  className="text-xs"
+                >
+                  Open Chronos ICU <ArrowRight size={14} className="ml-1" />
+                </Button>
+              )}
+            </div>
             <ProgressBar
               value={72}
               maxValue={100}

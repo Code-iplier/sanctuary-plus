@@ -25,6 +25,7 @@ import {
 import QueuePage from './pages/QueuePage';
 import DocumentationPage from './pages/DocumentationPage';
 import MedicationsPage from './pages/MedicationsPage';
+import RiskPage from './pages/RiskPage';
 import WardSyncPage from './pages/WardSyncPage';
 import ChronosPage from './pages/ChronosPage';
 import DashboardPage from './pages/DashboardPage';
@@ -62,15 +63,8 @@ const STAFF_NAV_ITEMS = [
   { id: 'documentation', label: 'Documentation', icon: FileText, desc: 'TipTap Clinical Notes' },
   { id: 'medications', label: 'Medications', icon: Shield, desc: 'RxNorm & Interactions' },
   { id: 'risk', label: 'Risk Assessment', icon: Heart, desc: 'ASCVD / LACE Score' },
+  { id: 'wardsync', label: 'WardSync', icon: RadioTower, desc: 'Ward Deterioration & Flowsheet' },
   { id: 'chronos', label: 'Chronos ICU', icon: Activity, desc: 'Early Warning Engine' },
-
-const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'queue', label: 'Queue', icon: Users },
-  { id: 'documentation', label: 'Documentation', icon: Pill },
-  { id: 'medications', label: 'Medications', icon: Shield },
-  { id: 'wardsync', label: 'WardSync', icon: RadioTower },
-  { id: 'chronos', label: 'Chronos ICU', icon: Heart },
 ] as const;
 
 type NavItemId = typeof STAFF_NAV_ITEMS[number]['id'];
@@ -626,17 +620,8 @@ export default function App() {
   }
 
   /* ========================================================================
-   * 3. STAFF SESSION: FULL PLATFORM ACCESS (ALL 6 MODULES)
+   * 3. STAFF SESSION: FULL PLATFORM ACCESS (ALL 7 MODULES)
    * ======================================================================== */
-  const [activePanel, setActivePanel] = useState<
-    | 'dashboard'
-    | 'queue'
-    | 'documentation'
-    | 'medications'
-    | 'wardsync'
-    | 'chronos'
-  >('dashboard');
-
   const renderPanel = () => {
     switch (activePanel) {
       case 'dashboard':
@@ -647,6 +632,8 @@ export default function App() {
         return <DocumentationPage />;
       case 'medications':
         return <MedicationsPage />;
+      case 'risk':
+        return <RiskPage />;
       case 'wardsync':
         return <WardSyncPage />;
       case 'chronos':
