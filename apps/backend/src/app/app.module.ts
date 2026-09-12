@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import path from 'node:path';
 import { ChronosModule } from '../modules/chronos/chronos.module';
 import { WardWatchModule } from '../modules/wardwatch/wardwatch.module';
 import { QueueModule } from '../queue/queue.module';
@@ -9,7 +10,10 @@ import { MedicationsModule } from '../modules/medications/medications.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: [path.resolve(__dirname, '../../../../.env'), '.env'],
+    }),
     AuthModule,
     DatabaseModule,
     ChronosModule,

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { HeartPulse, LogOut } from 'lucide-react';
 import QueuePage from './QueuePage';
 import MedicationsPage from './MedicationsPage';
@@ -10,12 +10,36 @@ type PatientShellProps = {
   onSessionChange: (session: Session) => void;
 };
 
+type PatientPanel = 'queue' | 'medications';
+
+function panelFromLocation(): PatientPanel {
+  return window.location.hash.slice(1) === 'medications'
+    ? 'medications'
+    : 'queue';
+}
+
 export default function PatientShell({
   session,
   onLogout,
   onSessionChange,
 }: PatientShellProps) {
-  const [activePanel, setActivePanel] = useState<'queue' | 'medications'>('queue');
+  const [activePanel, setActivePanel] =
+    useState<PatientPanel>(panelFromLocation);
+
+  const navigatePanel = (panel: PatientPanel) => {
+    setActivePanel(panel);
+    window.location.hash = panel;
+  };
+
+  useEffect(() => {
+    const restorePanel = () => setActivePanel(panelFromLocation());
+    window.addEventListener('hashchange', restorePanel);
+    window.addEventListener('popstate', restorePanel);
+    return () => {
+      window.removeEventListener('hashchange', restorePanel);
+      window.removeEventListener('popstate', restorePanel);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
@@ -27,27 +51,47 @@ export default function PatientShell({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-slate-900 tracking-tight">Sanctuary+</h1>
-                <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-bold border border-teal-200">Patient Portal</span>
+                <h1 className="text-base font-bold text-slate-900 tracking-tight">
+                  Sanctuary+
+                </h1>
+                <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-bold border border-teal-200">
+                  Patient Portal
+                </span>
               </div>
-              <p className="text-xs text-slate-400">Live Hospital Queue & Token Tracker</p>
+              <p className="text-xs text-slate-400">
+                Live Hospital Queue & Token Tracker
+              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex flex-col text-right">
-              <span className="text-xs font-semibold text-slate-800">{session.name ?? 'Patient'}</span>
-              <span className="text-[11px] text-slate-400">{session.phone ? `+91 ${session.phone}` : 'Verified'}</span>
+              <span className="text-xs font-semibold text-slate-800">
+                {session.name ?? 'Patient'}
+              </span>
+              <span className="text-[11px] text-slate-400">
+                {session.phone ? `+91 ${session.phone}` : 'Verified'}
+              </span>
             </div>
             <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1">
               {(['queue', 'medications'] as const).map((panel) => (
-                <button key={panel} type="button" onClick={() => setActivePanel(panel)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activePanel === panel ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500'}`}>
+                <button
+                  key={panel}
+                  type="button"
+                  onClick={() => navigatePanel(panel)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activePanel === panel ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500'}`}
+                >
                   {panel === 'queue' ? 'Queue' : 'Medications'}
                 </button>
               ))}
             </div>
-            <button type="button" onClick={onLogout} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition cursor-pointer">
-              <LogOut className="h-3.5 w-3.5 text-slate-500" /> <span>Exit Portal</span>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition cursor-pointer"
+            >
+              <LogOut className="h-3.5 w-3.5 text-slate-500" />{' '}
+              <span>Exit Portal</span>
             </button>
           </div>
         </div>
@@ -55,7 +99,11 @@ export default function PatientShell({
 
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6">
         {activePanel === 'queue' ? (
-          <QueuePage session={session} onLogout={onLogout} onSessionChange={onSessionChange} />
+          <QueuePage
+            session={session}
+            onLogout={onLogout}
+            onSessionChange={onSessionChange}
+          />
         ) : (
           <MedicationsPage session={session} />
         )}

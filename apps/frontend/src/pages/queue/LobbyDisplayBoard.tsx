@@ -17,7 +17,9 @@ interface LobbyDisplayBoardProps {
   snapshot: QueueSnapshot;
 }
 
-export default function LobbyDisplayBoard({ snapshot }: LobbyDisplayBoardProps) {
+export default function LobbyDisplayBoard({
+  snapshot,
+}: LobbyDisplayBoardProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -32,12 +34,18 @@ export default function LobbyDisplayBoard({ snapshot }: LobbyDisplayBoardProps) 
   // Find the most recently called patient across all departments
   const calledTickets = snapshot.tickets
     .filter((t) => t.status === 'CALLED')
-    .sort((a, b) => new Date(b.calledAt ?? 0).getTime() - new Date(a.calledAt ?? 0).getTime());
+    .sort(
+      (a, b) =>
+        new Date(b.calledAt ?? 0).getTime() -
+        new Date(a.calledAt ?? 0).getTime(),
+    );
 
   const latestCalled = calledTickets[0] ?? null;
 
   // Active consultations ("Now Serving")
-  const consultingTickets = snapshot.tickets.filter((t) => t.status === 'IN_CONSULTATION');
+  const consultingTickets = snapshot.tickets.filter(
+    (t) => t.status === 'IN_CONSULTATION',
+  );
 
   // Pleasant Web Audio Chime Synthesis on new call
   useEffect(() => {
@@ -45,7 +53,9 @@ export default function LobbyDisplayBoard({ snapshot }: LobbyDisplayBoardProps) 
       prevCalledTicketIdRef.current = latestCalled.id;
       if (audioEnabled) {
         try {
-          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const ctx = new (
+            window.AudioContext || (window as any).webkitAudioContext
+          )();
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = 'sine';
@@ -66,16 +76,22 @@ export default function LobbyDisplayBoard({ snapshot }: LobbyDisplayBoardProps) 
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
+      document.documentElement.requestFullscreen().catch(() => {
+        /* Fullscreen is optional. */
+      });
       setIsFullscreen(true);
     } else {
-      document.exitFullscreen().catch(() => {});
+      document.exitFullscreen().catch(() => {
+        /* Fullscreen is optional. */
+      });
       setIsFullscreen(false);
     }
   };
 
   return (
-    <div className={`bg-slate-950 text-white font-sans ${isFullscreen ? 'fixed inset-0 z-50 p-8 overflow-y-auto' : 'rounded-2xl p-6 shadow-2xl border border-slate-800'}`}>
+    <div
+      className={`bg-slate-950 text-white font-sans ${isFullscreen ? 'fixed inset-0 z-50 p-8 overflow-y-auto' : 'rounded-2xl p-6 shadow-2xl border border-slate-800'}`}
+    >
       {/* Top TV Display Header */}
       <div className="flex items-center justify-between pb-6 border-b border-slate-800/80 mb-6">
         <div className="flex items-center gap-3.5">
@@ -91,17 +107,27 @@ export default function LobbyDisplayBoard({ snapshot }: LobbyDisplayBoardProps) 
                 Public Monitor
               </span>
             </div>
-            <p className="text-xs text-slate-400">Live Department Calling & Room Allocation System</p>
+            <p className="text-xs text-slate-400">
+              Live Department Calling & Room Allocation System
+            </p>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="text-right hidden sm:block">
             <p className="text-xl font-mono font-bold text-teal-300 tracking-wider">
-              {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {currentTime.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              })}
             </p>
             <p className="text-xs text-slate-400 font-medium">
-              {currentTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+              {currentTime.toLocaleDateString([], {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+              })}
             </p>
           </div>
 
@@ -114,9 +140,15 @@ export default function LobbyDisplayBoard({ snapshot }: LobbyDisplayBoardProps) 
                   ? 'bg-teal-500/20 border-teal-500/40 text-teal-300'
                   : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
               }`}
-              title={audioEnabled ? 'Audio Chime Enabled' : 'Enable Audio Chime'}
+              title={
+                audioEnabled ? 'Audio Chime Enabled' : 'Enable Audio Chime'
+              }
             >
-              {audioEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+              {audioEnabled ? (
+                <Volume2 className="h-4 w-4" />
+              ) : (
+                <VolumeX className="h-4 w-4" />
+              )}
             </button>
 
             <button
@@ -125,7 +157,11 @@ export default function LobbyDisplayBoard({ snapshot }: LobbyDisplayBoardProps) 
               className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition cursor-pointer"
               title="Toggle Fullscreen"
             >
-              {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+              {isFullscreen ? (
+                <Minimize className="h-4 w-4" />
+              ) : (
+                <Maximize className="h-4 w-4" />
+              )}
             </button>
           </div>
         </div>
@@ -149,7 +185,9 @@ export default function LobbyDisplayBoard({ snapshot }: LobbyDisplayBoardProps) 
               </div>
 
               <div className="mt-4 inline-flex flex-wrap items-center justify-center gap-3 bg-white/10 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/20">
-                <span className="text-sm md:text-base text-teal-200 font-semibold">Please Proceed To:</span>
+                <span className="text-sm md:text-base text-teal-200 font-semibold">
+                  Please Proceed To:
+                </span>
                 <span className="text-2xl md:text-3xl font-black text-white">
                   Room {latestCalled.assignedRoomNumber ?? 'OPD Room'}
                 </span>
@@ -161,7 +199,8 @@ export default function LobbyDisplayBoard({ snapshot }: LobbyDisplayBoardProps) 
           </div>
         ) : (
           <div className="p-8 rounded-3xl bg-slate-900/60 border border-slate-800 text-center text-slate-400 text-sm">
-            Waiting for next patient call announcement. Please view active consultation rooms below.
+            Waiting for next patient call announcement. Please view active
+            consultation rooms below.
           </div>
         )}
 
@@ -172,14 +211,20 @@ export default function LobbyDisplayBoard({ snapshot }: LobbyDisplayBoardProps) 
               <Activity className="h-4 w-4 text-emerald-400" />
               Now Serving &bull; Active OPD Rooms
             </h2>
-            <span className="text-xs text-slate-500">Privacy Protected: Token Numbers Only</span>
+            <span className="text-xs text-slate-500">
+              Privacy Protected: Token Numbers Only
+            </span>
           </div>
 
           <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {snapshot.rooms.map((r) => {
-              const dept = snapshot.departments.find((d) => d.id === r.departmentId);
+              const dept = snapshot.departments.find(
+                (d) => d.id === r.departmentId,
+              );
               const activeTkt = snapshot.tickets.find(
-                (t) => t.assignedRoomId === r.id && (t.status === 'IN_CONSULTATION' || t.status === 'CALLED')
+                (t) =>
+                  t.assignedRoomId === r.id &&
+                  (t.status === 'IN_CONSULTATION' || t.status === 'CALLED'),
               );
 
               return (
@@ -192,25 +237,29 @@ export default function LobbyDisplayBoard({ snapshot }: LobbyDisplayBoardProps) 
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono font-bold text-slate-400">Room {r.roomNumber}</span>
+                    <span className="text-xs font-mono font-bold text-slate-400">
+                      Room {r.roomNumber}
+                    </span>
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                         activeTkt?.status === 'CALLED'
                           ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
                           : activeTkt?.status === 'IN_CONSULTATION'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : 'bg-slate-800 text-slate-500'
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : 'bg-slate-800 text-slate-500'
                       }`}
                     >
                       {activeTkt?.status === 'CALLED'
                         ? 'CALLED'
                         : activeTkt?.status === 'IN_CONSULTATION'
-                        ? 'IN CONSULT'
-                        : 'AVAILABLE'}
+                          ? 'IN CONSULT'
+                          : 'AVAILABLE'}
                     </span>
                   </div>
 
-                  <p className="text-xs text-slate-400 truncate mb-2">{dept?.name ?? 'OPD'}</p>
+                  <p className="text-xs text-slate-400 truncate mb-2">
+                    {dept?.name ?? 'OPD'}
+                  </p>
 
                   <div className="mt-2 text-center py-2 bg-slate-950/80 rounded-xl border border-slate-800">
                     <p className="text-2xl font-black font-mono text-white tracking-wider">
@@ -229,7 +278,8 @@ export default function LobbyDisplayBoard({ snapshot }: LobbyDisplayBoardProps) 
         {/* Public Notice Footer */}
         <div className="pt-4 border-t border-slate-800/80 text-center text-xs text-slate-400 flex flex-wrap items-center justify-between gap-2">
           <span>
-            Patients are advised to monitor the display board and their mobile token tracker.
+            Patients are advised to monitor the display board and their mobile
+            token tracker.
           </span>
           <span className="text-teal-400 font-semibold">
             Sanctuary+ Smart Healthcare Platform &bull; Hackathon Live Demo

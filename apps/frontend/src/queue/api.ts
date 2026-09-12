@@ -27,8 +27,10 @@ import type {
 
 export { subscribeQueue, loadLocalSnapshot };
 
-const API_BASE = import.meta.env.VITE_QUEUE_API_URL ?? 'http://localhost:3000/api';
-const SOCKET_URL = import.meta.env.VITE_QUEUE_SOCKET_URL ?? 'http://localhost:3000';
+const API_BASE =
+  import.meta.env.VITE_QUEUE_API_URL ?? 'http://localhost:3000/api';
+const SOCKET_URL =
+  import.meta.env.VITE_QUEUE_SOCKET_URL ?? 'http://localhost:3000';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -49,9 +51,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function connectRealtime(onState?: (state: QueueSnapshot) => void): () => void {
+export function connectRealtime(
+  onState?: (state: QueueSnapshot) => void,
+): () => void {
   try {
-    const socket: Socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+    const socket: Socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+    });
     if (onState) {
       socket.on('state-updated', onState);
       socket.on('connected', (data: { ok: boolean; state: QueueSnapshot }) => {
@@ -63,15 +69,18 @@ export function connectRealtime(onState?: (state: QueueSnapshot) => void): () =>
       socket.disconnect();
     };
   } catch {
-    return () => {};
+    return () => {
+      /* No socket was created. */
+    };
   }
 }
 
 export function fetchSnapshot(departmentId?: string): Promise<QueueSnapshot> {
-  const url = departmentId ? `/queue/snapshot?departmentId=${encodeURIComponent(departmentId)}` : '/queue/snapshot';
+  const url = departmentId
+    ? `/queue/snapshot?departmentId=${encodeURIComponent(departmentId)}`
+    : '/queue/snapshot';
   return request<QueueSnapshot>(url).catch(() => loadLocalSnapshot());
 }
-
 
 export function issueTicket(input: {
   patientId: string;
@@ -94,90 +103,129 @@ export function triageTicket(
     vitals?: { bp?: string; pulse?: string; temp?: string; spo2?: string };
     triageNotes?: string;
     actor?: string;
-  }
+  },
 ): Promise<PatientTicket> {
-  return request<PatientTicket>(`/queue/tickets/${encodeURIComponent(ticketId)}/triage`, {
-    method: 'POST',
-    body: JSON.stringify(input),
-  }).catch(() => triageTicketLocal(ticketId, input));
+  return request<PatientTicket>(
+    `/queue/tickets/${encodeURIComponent(ticketId)}/triage`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    },
+  ).catch(() => triageTicketLocal(ticketId, input));
 }
 
-export function callNext(roomId: string, actor?: string): Promise<PatientTicket> {
-  return request<PatientTicket>(`/queue/rooms/${encodeURIComponent(roomId)}/call-next`, {
-    method: 'POST',
-    body: JSON.stringify({ actor }),
-  }).catch(() => callNextLocal(roomId, actor));
+export function callNext(
+  roomId: string,
+  actor?: string,
+): Promise<PatientTicket> {
+  return request<PatientTicket>(
+    `/queue/rooms/${encodeURIComponent(roomId)}/call-next`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ actor }),
+    },
+  ).catch(() => callNextLocal(roomId, actor));
 }
 
-export function startConsultation(roomId: string, actor?: string): Promise<PatientTicket> {
-  return request<PatientTicket>(`/queue/rooms/${encodeURIComponent(roomId)}/start`, {
-    method: 'POST',
-    body: JSON.stringify({ actor }),
-  }).catch(() => startConsultationLocal(roomId, actor));
+export function startConsultation(
+  roomId: string,
+  actor?: string,
+): Promise<PatientTicket> {
+  return request<PatientTicket>(
+    `/queue/rooms/${encodeURIComponent(roomId)}/start`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ actor }),
+    },
+  ).catch(() => startConsultationLocal(roomId, actor));
 }
 
 export function finishConsultation(
   roomId: string,
   notes?: string,
-  actor?: string
+  actor?: string,
 ): Promise<PatientTicket> {
-  return request<PatientTicket>(`/queue/rooms/${encodeURIComponent(roomId)}/finish`, {
-    method: 'POST',
-    body: JSON.stringify({ notes, actor }),
-  }).catch(() => finishConsultationLocal(roomId, notes, actor));
+  return request<PatientTicket>(
+    `/queue/rooms/${encodeURIComponent(roomId)}/finish`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ notes, actor }),
+    },
+  ).catch(() => finishConsultationLocal(roomId, notes, actor));
 }
 
 export function markNoShow(
   roomId: string,
   reason?: string,
-  actor?: string
+  actor?: string,
 ): Promise<PatientTicket> {
-  return request<PatientTicket>(`/queue/rooms/${encodeURIComponent(roomId)}/no-show`, {
-    method: 'POST',
-    body: JSON.stringify({ reason, actor }),
-  }).catch(() => markNoShowLocal(roomId, reason, actor));
+  return request<PatientTicket>(
+    `/queue/rooms/${encodeURIComponent(roomId)}/no-show`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reason, actor }),
+    },
+  ).catch(() => markNoShowLocal(roomId, reason, actor));
 }
 
-export function recallPatient(roomId: string, actor?: string): Promise<PatientTicket> {
-  return request<PatientTicket>(`/queue/rooms/${encodeURIComponent(roomId)}/recall`, {
-    method: 'POST',
-    body: JSON.stringify({ actor }),
-  }).catch(() => recallPatientLocal(roomId, actor));
+export function recallPatient(
+  roomId: string,
+  actor?: string,
+): Promise<PatientTicket> {
+  return request<PatientTicket>(
+    `/queue/rooms/${encodeURIComponent(roomId)}/recall`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ actor }),
+    },
+  ).catch(() => recallPatientLocal(roomId, actor));
 }
 
-export function skipTicket(roomId: string, actor?: string): Promise<PatientTicket> {
-  return request<PatientTicket>(`/queue/rooms/${encodeURIComponent(roomId)}/skip`, {
-    method: 'POST',
-    body: JSON.stringify({ actor }),
-  }).catch(() => skipTicketLocal(roomId, actor));
+export function skipTicket(
+  roomId: string,
+  actor?: string,
+): Promise<PatientTicket> {
+  return request<PatientTicket>(
+    `/queue/rooms/${encodeURIComponent(roomId)}/skip`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ actor }),
+    },
+  ).catch(() => skipTicketLocal(roomId, actor));
 }
 
 export function cancelTicket(
   ticketId: string,
   reason?: string,
-  actor?: string
+  actor?: string,
 ): Promise<PatientTicket> {
-  return request<PatientTicket>(`/queue/tickets/${encodeURIComponent(ticketId)}/cancel`, {
-    method: 'POST',
-    body: JSON.stringify({ reason, actor }),
-  }).catch(() => cancelTicketLocal(ticketId, actor, reason));
+  return request<PatientTicket>(
+    `/queue/tickets/${encodeURIComponent(ticketId)}/cancel`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reason, actor }),
+    },
+  ).catch(() => cancelTicketLocal(ticketId, actor, reason));
 }
 
 export function updatePriority(
   ticketId: string,
   priority: TriageLevel,
   reason: string,
-  actor?: string
+  actor?: string,
 ): Promise<PatientTicket> {
-  return request<PatientTicket>(`/queue/tickets/${encodeURIComponent(ticketId)}/priority`, {
-    method: 'PATCH',
-    body: JSON.stringify({ priority, reason, actor }),
-  }).catch(() => updatePriorityLocal(ticketId, priority, reason, actor));
+  return request<PatientTicket>(
+    `/queue/tickets/${encodeURIComponent(ticketId)}/priority`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ priority, reason, actor }),
+    },
+  ).catch(() => updatePriorityLocal(ticketId, priority, reason, actor));
 }
 
 export function updateDoctorStatus(
   doctorId: string,
-  status: DoctorAvailability
+  status: DoctorAvailability,
 ): Promise<any> {
   return request(`/queue/doctors/${encodeURIComponent(doctorId)}/status`, {
     method: 'PATCH',
@@ -187,7 +235,7 @@ export function updateDoctorStatus(
 
 export function updateRoomStatus(
   roomId: string,
-  status: RoomStatus
+  status: RoomStatus,
 ): Promise<any> {
   return request(`/queue/rooms/${encodeURIComponent(roomId)}/status`, {
     method: 'PATCH',
@@ -199,18 +247,56 @@ export function updateRoomStatus(
 const PATIENTS_STORE_KEY = 'sanctuary_patients_v2';
 
 const DEFAULT_PATIENTS: Patient[] = [
-  { id: 'PAT-000101', name: 'Ananya Sharma', phone: '9000011111', age: '28', gender: 'Female', hospitalId: 'h1' },
-  { id: 'PAT-000102', name: 'Rohan Patel', phone: '9000022222', age: '35', gender: 'Male', hospitalId: 'h1' },
-  { id: 'PAT-000103', name: 'Neha Das', phone: '9000033333', age: '42', gender: 'Female', hospitalId: 'h1' },
-  { id: 'PAT-000104', name: 'Imran Ali', phone: '9000044444', age: '55', gender: 'Male', hospitalId: 'h1' },
-  { id: 'PAT-000105', name: 'Priya Nambiar', phone: '9000055555', age: '30', gender: 'Female', hospitalId: 'h1' },
+  {
+    id: 'PAT-000101',
+    name: 'Ananya Sharma',
+    phone: '9000011111',
+    age: '28',
+    gender: 'Female',
+    hospitalId: 'h1',
+  },
+  {
+    id: 'PAT-000102',
+    name: 'Rohan Patel',
+    phone: '9000022222',
+    age: '35',
+    gender: 'Male',
+    hospitalId: 'h1',
+  },
+  {
+    id: 'PAT-000103',
+    name: 'Neha Das',
+    phone: '9000033333',
+    age: '42',
+    gender: 'Female',
+    hospitalId: 'h1',
+  },
+  {
+    id: 'PAT-000104',
+    name: 'Imran Ali',
+    phone: '9000044444',
+    age: '55',
+    gender: 'Male',
+    hospitalId: 'h1',
+  },
+  {
+    id: 'PAT-000105',
+    name: 'Priya Nambiar',
+    phone: '9000055555',
+    age: '30',
+    gender: 'Female',
+    hospitalId: 'h1',
+  },
 ];
 
 function getStoredPatients(): Patient[] {
   try {
     const raw = sessionStorage.getItem(PATIENTS_STORE_KEY);
     if (!raw) {
-      sessionStorage.setItem(PATIENTS_STORE_KEY, JSON.stringify(DEFAULT_PATIENTS));
+      sessionStorage.setItem(
+        PATIENTS_STORE_KEY,
+        JSON.stringify(DEFAULT_PATIENTS),
+      );
       return DEFAULT_PATIENTS;
     }
     return JSON.parse(raw);
@@ -219,7 +305,9 @@ function getStoredPatients(): Patient[] {
   }
 }
 
-export async function findPatientByPhone(phone: string): Promise<Patient | null> {
+export async function findPatientByPhone(
+  phone: string,
+): Promise<Patient | null> {
   const clean = phone.replace(/\D/g, '');
   const patients = getStoredPatients();
   return patients.find((p) => p.phone.replace(/\D/g, '') === clean) ?? null;
@@ -248,7 +336,9 @@ export async function registerPatient(input: {
   patients.push(newPatient);
   try {
     sessionStorage.setItem(PATIENTS_STORE_KEY, JSON.stringify(patients));
-  } catch {}
+  } catch {
+    /* Session storage may be unavailable in restricted browser contexts. */
+  }
   return newPatient;
 }
 

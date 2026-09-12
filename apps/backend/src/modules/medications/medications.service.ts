@@ -25,6 +25,10 @@ export class MedicationsService {
     return this.repository.list(patientId);
   }
 
+  async listPatients() {
+    return this.repository.listPatients();
+  }
+
   async listAllergies(patientId: string): Promise<Allergy[]> {
     return this.repository.listAllergies(patientId);
   }

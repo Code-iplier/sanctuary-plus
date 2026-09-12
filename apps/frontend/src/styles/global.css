@@ -37,6 +37,22 @@ textarea {
   max-width: 100%;
 }
 
+/* Keep HeroUI tab navigation horizontal unless a page explicitly opts into
+   the vertical orientation. This applies consistently across all workflows. */
+[data-slot='tabs'][data-orientation='horizontal'] [data-slot='tabs-list'] {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+[data-slot='tabs'][data-orientation='horizontal'] [data-slot='tabs-tab'] {
+  width: auto;
+  flex: 0 0 auto;
+}
+
 /* Custom component overrides for healthcare */
 .triage-critical {
   background-color: #fecaca;
@@ -127,7 +143,7 @@ tr:hover {
 /* Ensure standalone badges in cards and tiles stay strictly contained */
 .badge:not(.badge-anchor .badge),
 .badge--contained,
-[data-slot="badge"]:not(.badge-anchor [data-slot="badge"]) {
+[data-slot='badge']:not(.badge-anchor [data-slot='badge']) {
   position: relative !important;
   top: auto !important;
   right: auto !important;

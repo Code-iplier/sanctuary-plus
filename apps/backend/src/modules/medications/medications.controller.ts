@@ -138,6 +138,15 @@ export class PatientMedicationsController {
 export class MedicationsController {
   constructor(private readonly medicationsService: MedicationsService) {}
 
+  @Get('patients')
+  listPatients(
+    @Headers('x-sanctuary-role') role: string | undefined,
+    @Headers('x-sanctuary-patient-id') actorPatientId: string | undefined,
+  ) {
+    assertStaff(getMedicationActor(role, actorPatientId));
+    return this.medicationsService.listPatients();
+  }
+
   @Post(':medicationId/reconcile')
   reconcile(
     @Param('medicationId') medicationId: string,

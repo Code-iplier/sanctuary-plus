@@ -9,6 +9,7 @@ import {
   getMedicationComparison,
   getMedicationSafety,
   getMedications,
+  getMedicationPatients,
   reconcileMedication,
   verifyMedication,
   type MedicationInteraction,
@@ -16,6 +17,7 @@ import {
   type MedicationAuditEvent,
   type ReconciliationDecision,
   type MedicationAccess,
+  type MedicationPatient,
 } from '../domains/medications/api/medications.client';
 import { MedicationTable } from '../domains/medications/components/MedicationTable';
 import { MedicationComparison } from '../domains/medications/components/MedicationComparison';
@@ -33,7 +35,6 @@ const STATUSES: Array<MedicationStatus | 'all'> = [
   'review',
   'flagged',
 ];
-const PATIENT_ID = 'patient-001';
 const DECISIONS: ReconciliationDecision[] = [
   'continue',
   'modify',
@@ -60,7 +61,11 @@ export default function MedicationsPage({ session }: MedicationsPageProps) {
           },
     [isStaff, session],
   );
-  const patientId = isStaff ? PATIENT_ID : session.patientId;
+  const [patients, setPatients] = useState<MedicationPatient[]>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
+    isStaff ? null : session.patientId,
+  );
+  const patientId = isStaff ? (selectedPatientId ?? '') : session.patientId;
   const [medications, setMedications] = useState<Medication[]>([]);
   const [allergies, setAllergies] = useState<
     Array<{
@@ -106,7 +111,38 @@ export default function MedicationsPage({ session }: MedicationsPageProps) {
   });
 
   useEffect(() => {
+    if (!isStaff) return;
     let cancelled = false;
+    getMedicationPatients(access)
+      .then((items) => {
+        if (cancelled) return;
+        setPatients(items);
+        setSelectedPatientId((current) =>
+          current && items.some((patient) => patient.id === current)
+            ? current
+            : (items[0]?.id ?? null),
+        );
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Unable to load the patient list',
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [access, isStaff]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!patientId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([
       getMedications(patientId, access),
@@ -317,6 +353,41 @@ export default function MedicationsPage({ session }: MedicationsPageProps) {
           </Badge>
         </div>
       </Card>
+
+      {isStaff && (
+        <Card className="border border-slate-200 bg-white p-4">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">
+                Patient reconciliation workspace
+              </p>
+              <p className="text-xs text-slate-500">
+                Select a patient to review prescriptions, comparisons, and audit
+                history.
+              </p>
+            </div>
+            <label className="flex min-w-64 flex-col gap-1 text-sm text-slate-700">
+              <span className="font-medium">Patient</span>
+              <select
+                value={selectedPatientId ?? ''}
+                onChange={(event) => setSelectedPatientId(event.target.value)}
+                className="min-h-10 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm"
+                disabled={patients.length === 0}
+              >
+                {patients.length === 0 && (
+                  <option value="">No patients found</option>
+                )}
+                {patients.map((patient) => (
+                  <option key={patient.id} value={patient.id}>
+                    {patient.displayName} ({patient.id}) ·{' '}
+                    {patient.medicationCount} meds
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <Card className="p-3">

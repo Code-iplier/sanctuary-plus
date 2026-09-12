@@ -11,7 +11,7 @@
 
 **Sanctuary+** is a hackathon project for the problem statement:
 
-> *"An AI-powered healthcare platform for reducing hospital overcrowding and improving patient safety through smart digital queues, automated clinical documentation, medication reconciliation, ward-level device/vitals correlation, and ICU deterioration monitoring."*
+> _"An AI-powered healthcare platform for reducing hospital overcrowding and improving patient safety through smart digital queues, automated clinical documentation, medication reconciliation, ward-level device/vitals correlation, and ICU deterioration monitoring."_
 
 [Project Chronos](https://github.com/anomalyco/chronos) (ICU Early Warning System) is integrated as a feature module within the platform via a NestJS "Chronos Bridge" that calls the existing FastAPI engine (port 8000).
 
@@ -41,23 +41,29 @@
 
 ## Features & ML vs Rule-Based Approach
 
-| Feature | Approach | Description |
-|---------|----------|-------------|
-| **Chronos (ICU Early Warning)** | **ML** | Existing 4-engine ensemble (LGBM/XGBoost/GRU-D/TCN) — differentiator |
-| **Smart Digital Queues** | **Rules** | ESI triage, bed assignment, acuity + wait-time weighting |
-| **Clinical Documentation** | **ML + Rules** | TipTap editor + Whisper (future) voice; ClinicalBERT NER; structured data → FHIR |
-| **Medication Reconciliation** | **Rules** | RxNorm exact/fuzzy matching, DrugBank DDI, allergy cross-check |
-| **WardSync** | **Rules** | General-ward device state + NEWS2 trend correlation with evidence-backed review flags |
+| Feature                         | Approach       | Description                                                                           |
+| ------------------------------- | -------------- | ------------------------------------------------------------------------------------- |
+| **Chronos (ICU Early Warning)** | **ML**         | Existing 4-engine ensemble (LGBM/XGBoost/GRU-D/TCN) — differentiator                  |
+| **Smart Digital Queues**        | **Rules**      | ESI triage, bed assignment, acuity + wait-time weighting                              |
+| **Clinical Documentation**      | **ML + Rules** | TipTap editor + Whisper (future) voice; ClinicalBERT NER; structured data → FHIR      |
+| **Medication Reconciliation**   | **Rules**      | RxNorm exact/fuzzy matching, DrugBank DDI, allergy cross-check                        |
+| **WardSync**                    | **Rules**      | General-ward device state + NEWS2 trend correlation with evidence-backed review flags |
 
 ## Frontend Structure
 
-The dashboard is a single-page app with a **navigation shell** in `src/App.tsx` (a `Drawer`-based sidebar that switches between feature pages) and one file per feature under `src/pages/`. Every page is a **default export** (`export default function XPage()`), keeping `App.tsx` thin.
+The dashboard is a single-page app with role-specific navigation shells in
+`apps/frontend/src/pages/StaffShell.tsx` and `PatientShell.tsx`. `App.tsx`
+handles session restoration and selects the appropriate shell; each shell
+switches between feature pages. The active page is stored in the URL hash, so
+refreshing a page keeps the current workflow open (for example, `#medications`
+or `#wardsync`). Every feature page is a default export.
 
 UI is built with **Hero UI v3** (`@heroui/react@^3.2.4`), which is built on React Aria Components + **Tailwind CSS v4**. There is a hard requirement to install the `@react-aria/*` peers (`@react-aria/i18n`, `@react-aria/ssr`, `@react-aria/utils`, `react-aria`, `react-aria-components`) — these are **not** auto-installed when using `--legacy-peer-deps`, so they are explicit deps in `apps/frontend/package.json`.
 
 Components used: `Card`, `Badge`, `Button`, `Tabs` (`Tabs.List` / `Tabs.Tab` / `Tabs.Panel`), `Input`, `Alert`, `ProgressBar`, `Avatar`, `Drawer` (`Drawer.Trigger` / `Drawer.Content` / `Drawer.Header` / `Drawer.Body`), and `Toast` (`Toast.Provider`). Icons come from **`lucide-react`**.
 
 **Styling/entry setup (critical for the app to render):**
+
 - `apps/frontend/index.html` — Vite entry; loads `/src/main.tsx` into `#root` (without it the page is blank).
 - `apps/frontend/vite.config.ts` — `@vitejs/plugin-react` + `@tailwindcss/vite`.
 - `apps/frontend/src/styles/global.css` — starts with `@import "tailwindcss";` then `@import "@heroui/styles";` (this injects all Hero UI styles). Custom CSS follows.
@@ -100,14 +106,31 @@ npx nx serve frontend
 ### Run the backend API gateway (NestJS, port 3000)
 
 ```bash
-cd apps/backend && npm run start:dev
+# From the repository root, after PostgreSQL is running:
+docker compose up -d postgres
+Copy-Item .env.example .env # PowerShell; use `cp .env.example .env` on Unix
+npx prisma generate
+npx prisma migrate deploy
+# From cd/apps/backend  RUN : 
+npm run start:dev 
 # or: npx nx serve backend
 ```
+
+The backend loads the repository-root `.env`. The local PostgreSQL service is
+exposed on port `5433`; do not commit `.env`.
 
 ### Run Chronos ICU Early Warning (existing FastAPI engine, port 8000)
 
 ```bash
-cd chronos && uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
+cd services/chronos
+python -m pip install -r requirements.txt
+python -m uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Alternatively, start the containerized service from the repository root:
+
+```bash
+docker compose up -d chronos
 ```
 
 ## Authentication and access flow
@@ -120,9 +143,9 @@ that token as an `Authorization: Bearer <token>` header.
 
 ### Demo accounts
 
-| Role | Username | Password |
-|------|----------|----------|
-| Staff | `staff@hospital.demo` | `staff123` |
+| Role             | Username              | Password   |
+| ---------------- | --------------------- | ---------- |
+| Staff            | `staff@hospital.demo` | `staff123` |
 | Admin/demo staff | `admin@hospital.demo` | `admin123` |
 
 Patient access continues to use the existing patient phone/registration flow.
@@ -132,9 +155,9 @@ later authentication phase.
 
 ### Authentication endpoints
 
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| `POST` | `/api/auth/staff/login` | Issue a staff JWT from demo credentials |
+| Method | Endpoint                  | Purpose                                              |
+| ------ | ------------------------- | ---------------------------------------------------- |
+| `POST` | `/api/auth/staff/login`   | Issue a staff JWT from demo credentials              |
 | `POST` | `/api/auth/patient/login` | Issue a patient JWT for the selected patient session |
 
 Medication routes require a valid bearer token and enforce patient ownership
@@ -182,7 +205,8 @@ automatically.
 
 Hospital staff can:
 
-- View the medication lists for a patient.
+- Select a patient from the database-backed patient list.
+- View that patient's prescriptions by name and patient ID.
 - Add hospital medication orders.
 - Compare home prescriptions with hospital orders.
 - Review allergy and interaction alerts.
@@ -199,20 +223,26 @@ Medication verification states are:
 Every verification and reconciliation decision records the acting user, reason,
 before/after values where applicable, and timestamp in the audit trail.
 
+When a patient logs in, the backend persists the patient's display name to the
+`Patient` record. This is the name shown in the staff reconciliation selector.
+WardSync's in-memory demo patients are separate from the Prisma medication
+patient records.
+
 ### Medication API surface
 
-| Method | Endpoint | Access |
-|--------|----------|--------|
-| `GET` | `/api/patients/:patientId/medications` | Patient owner or staff |
-| `POST` | `/api/patients/:patientId/medications` | Patient owner for home meds; staff for hospital orders |
-| `GET` | `/api/patients/:patientId/allergies` | Patient owner or staff |
-| `POST` | `/api/patients/:patientId/allergies` | Patient owner or staff |
-| `GET` | `/api/patients/:patientId/medication-comparison` | Staff workflow |
-| `GET` | `/api/patients/:patientId/medication-safety` | Staff workflow |
-| `GET` | `/api/patients/:patientId/medication-history` | Patient-safe history or staff |
-| `GET` | `/api/patients/:patientId/medication-audit` | Staff only |
-| `PATCH` | `/api/medications/:medicationId/verification` | Staff only |
-| `POST` | `/api/medications/:medicationId/reconcile` | Staff only |
+| Method  | Endpoint                                         | Access                                                 |
+| ------- | ------------------------------------------------ | ------------------------------------------------------ |
+| `GET`   | `/api/patients/:patientId/medications`           | Patient owner or staff                                 |
+| `POST`  | `/api/patients/:patientId/medications`           | Patient owner for home meds; staff for hospital orders |
+| `GET`   | `/api/patients/:patientId/allergies`             | Patient owner or staff                                 |
+| `POST`  | `/api/patients/:patientId/allergies`             | Patient owner or staff                                 |
+| `GET`   | `/api/patients/:patientId/medication-comparison` | Staff workflow                                         |
+| `GET`   | `/api/patients/:patientId/medication-safety`     | Staff workflow                                         |
+| `GET`   | `/api/patients/:patientId/medication-history`    | Patient-safe history or staff                          |
+| `GET`   | `/api/patients/:patientId/medication-audit`      | Staff only                                             |
+| `GET`   | `/api/medications/patients`                      | Staff-only patient selector                            |
+| `PATCH` | `/api/medications/:medicationId/verification`    | Staff only                                             |
+| `POST`  | `/api/medications/:medicationId/reconcile`       | Staff only                                             |
 
 ### Database setup
 
@@ -231,20 +261,20 @@ field to medication records. The backend requires `DATABASE_URL` at startup.
 
 ### Frontend (`apps/frontend/`)
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Vite dev server (port 5173) |
-| `npm run build` | Production build via Vite |
+| Script            | Description                  |
+| ----------------- | ---------------------------- |
+| `npm run dev`     | Vite dev server (port 5173)  |
+| `npm run build`   | Production build via Vite    |
 | `npm run preview` | Preview the production build |
 
 ### Backend (`apps/backend/`)
 
-| Script | Description |
-|--------|-------------|
+| Script              | Description                      |
+| ------------------- | -------------------------------- |
 | `npm run start:dev` | NestJS in watch mode (port 3000) |
-| `npm run build` | Build the NestJS app |
-| `npm run test` | Vitest unit tests |
-| `npm run lint` | ESLint |
+| `npm run build`     | Build the NestJS app             |
+| `npm run test`      | Vitest unit tests                |
+| `npm run lint`      | ESLint                           |
 
 ### Nx Workspace (root)
 
@@ -323,7 +353,7 @@ The frontend was written against the real Hero UI v3 API (verified from `@heroui
 
 ## Code Quality Gates
 
-The repo enforces three local gates (all currently passing with **0 errors / 0 warnings**):
+Run the same core checks used by CI before pushing:
 
 ```bash
 npx tsc --noEmit -p apps/frontend/tsconfig.json   # type check
@@ -333,46 +363,53 @@ npx eslint "apps/frontend/src/**/*.{ts,tsx}"
 
 - `lucide-react` is installed with `--legacy-peer-deps`.
 - `src/vite-env.d.ts` declares `vite/client` so CSS side-effect imports type-check.
+- ESLint currently reports existing non-blocking warnings in parts of the
+  legacy queue and Chronos UI; the workflow keeps lint and formatting reports
+  visible without blocking builds on those pre-existing warnings.
 
 ## CI/CD Workflow (`.github/workflows/deploy.yml`)
 
-A 6-stage GitHub Actions pipeline. Stages 1–3 run on every PR / push / tag; deploy stages run on `main` or `v*` tags.
+The GitHub Actions pipeline runs type checks, tests, formatting, linting,
+frontend/backend builds, dependency scanning, Docker/Trivy checks, and
+optional tag-based GitHub Pages deployment.
 
-| Stage | Job | What it does |
-|-------|-----|--------------|
-| 1 | `lint-quality` | `npx nx typecheck`, `npx nx format:check`, `npx nx lint`; fails the build on typecheck/lint failure |
-| 1 | `unit-tests` | `npx nx test` (Vitest) |
-| 2 | `build-artifacts` | `npx nx build backend` and `npx nx build web`; uploads `apps/backend/dist` + frontend dist |
-| 2B | `security-scan` | `npm audit --audit-level=high` |
-| 3 | `docker-build` | Builds + pushes backend Docker image to GHCR (main only) |
-| 4 | `trivy-scan` | Trivy image vulnerability scan (tags/main) |
-| 5 | `deploy` | Deploys frontend to GitHub Pages (`peaceiris/actions-gh-pages`); health check |
-| 6 | `ci-summary` | Writes a Markdown CI report to the run summary |
+| Stage | Job               | What it does                                                                     |
+| ----- | ----------------- | -------------------------------------------------------------------------------- |
+| 1     | `lint-quality`    | Generates Prisma Client, runs backend/frontend type checks, Prettier, and ESLint |
+| 1     | `unit-tests`      | Runs Vitest with `--passWithNoTests`                                             |
+| 2     | `build-artifacts` | Builds the NestJS backend and Vite frontend; uploads the Pages artifact          |
+| 2B    | `security-scan`   | Runs `npm audit --audit-level=high`                                              |
+| 3     | `docker-build`    | Builds the backend image and pushes lowercase GHCR tags on `main`/`v*` pushes    |
+| 4     | `trivy-scan`      | Scans the backend image and uploads a report                                     |
+| 5     | `deploy`          | Deploys the frontend to GitHub Pages for `v*` tags                               |
+| 6     | `ci-summary`      | Writes a Markdown CI report to the run summary                                   |
 
 **Triggers:** `pull_request` (non-`main`), `push` (non-`main`), `tags: v*`, `workflow_dispatch`.
 
 **Notes:**
+
 - GitHub Pages serves only the static React frontend; the NestJS backend is deployed via Docker to GHCR / a VPS.
 - `BASE_PATH` defaults to `/`; set `VITE_BASE_PATH` for sub-path hosting.
 - HIPAA posture: on-premise / air-gapped friendly — no cloud egress for patient data.
 
 ### CI/CD Caveats
 
-The workflow file still references the **original scaffold name `web`**, which no longer matches the repo:
-
-- `npx nx build web` and `cd apps/web` / `apps/web/dist` / `publish_dir: ./frontend-build/apps/web/dist` — the real project is **`frontend`** (`apps/frontend`).
-- The `deploy` job references `chronos/backend/models/`, but there is no `chronos/` directory in this repo (Chronos is an external/linked system).
-
-Before the deploy stage can succeed end-to-end, update those references from `web` → `frontend` (and `apps/web` → `apps/frontend`), and either vendor Chronos or make its verification step conditional. The **`lint-quality`** stage (the part that checks lint/format/typecheck) is unaffected by these mismatches and passes today.
+GitHub Pages deployment is intentionally tag-based (`v*`) and uses the
+`github-pages` environment. The environment must allow the `v*` tag rule in
+repository settings. The backend image is pushed to GHCR only on pushes to
+`main` or version tags. The workflow does not require the external Chronos
+service to build the frontend or backend.
 
 ## ML vs Rule-Based Design Rationale
 
 **Rules** for auditable, deterministic clinical logic:
+
 - **Queues** — ESI triage is standardized and protocol-driven.
 - **Medications** — RxNorm/DrugBank DDI + allergy checks are knowledge-base lookups.
 - **Documentation** — structured data → FHIR mapping is rule-based for reliability.
 
 **ML** where it adds value:
+
 - **Chronos** — the project's key differentiator; already trained ensembles.
 - **Documentation NLP** — free-text needs ClinicalBERT / Whisper.
 - **WardSync** — deterministic NEWS2 scoring and device-state correlation produce auditable ward review flags.

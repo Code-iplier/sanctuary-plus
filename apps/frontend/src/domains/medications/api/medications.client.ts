@@ -68,6 +68,12 @@ export type MedicationAccess = {
   accessToken?: string;
 };
 
+export type MedicationPatient = {
+  id: string;
+  displayName: string;
+  medicationCount: number;
+};
+
 async function request<T>(
   path: string,
   access: MedicationAccess,
@@ -101,6 +107,12 @@ export function getMedications(
     `/patients/${encodeURIComponent(patientId)}/medications`,
     access,
   );
+}
+
+export function getMedicationPatients(
+  access: MedicationAccess,
+): Promise<MedicationPatient[]> {
+  return request<MedicationPatient[]>('/medications/patients', access);
 }
 
 export function getMedicationComparison(

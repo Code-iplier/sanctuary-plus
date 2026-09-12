@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../database/prisma.service';
 import type {
   AuthResponse,
   AuthUser,
@@ -22,7 +23,10 @@ const STAFF_ACCOUNTS = [
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly jwt: JwtService) {}
+  constructor(
+    private readonly jwt: JwtService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async loginStaff(input: StaffLoginInput): Promise<AuthResponse> {
     const account = STAFF_ACCOUNTS.find(
@@ -41,14 +45,21 @@ export class AuthService {
   }
 
   async loginPatient(input: PatientLoginInput): Promise<AuthResponse> {
-    if (!input.patientId?.trim()) {
+    const patientId = input.patientId?.trim();
+    if (!patientId) {
       throw new UnauthorizedException('A patient ID is required');
     }
+    const displayName = input.name?.trim() || patientId;
+    await this.prisma.patient.upsert({
+      where: { id: patientId },
+      update: { displayName },
+      create: { id: patientId, displayName },
+    });
     return this.issue({
-      sub: input.patientId,
+      sub: patientId,
       role: 'patient',
-      patientId: input.patientId,
-      displayName: input.name,
+      patientId,
+      displayName,
     });
   }
 

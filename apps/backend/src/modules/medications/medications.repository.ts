@@ -29,6 +29,20 @@ const DEFAULT_PATIENT_ID = 'patient-001';
 export class MedicationsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async listPatients(): Promise<
+    Array<{ id: string; displayName: string; medicationCount: number }>
+  > {
+    const patients = await this.prisma.patient.findMany({
+      orderBy: { displayName: 'asc' },
+      include: { _count: { select: { medications: true } } },
+    });
+    return patients.map((patient) => ({
+      id: patient.id,
+      displayName: patient.displayName,
+      medicationCount: patient._count.medications,
+    }));
+  }
+
   async list(patientId: string): Promise<Medication[]> {
     await this.ensureDemoData(patientId);
     const records = await this.prisma.medication.findMany({
