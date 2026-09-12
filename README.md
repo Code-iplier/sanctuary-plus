@@ -11,7 +11,7 @@
 
 **Sanctuary+** is a hackathon project for the problem statement:
 
-> *"An AI-powered healthcare platform for reducing hospital overcrowding and improving patient safety through smart digital queues, automated clinical documentation, medication reconciliation, and preventive disease-risk assessment."*
+> *"An AI-powered healthcare platform for reducing hospital overcrowding and improving patient safety through smart digital queues, automated clinical documentation, medication reconciliation, ward-level device/vitals correlation, and ICU deterioration monitoring."*
 
 [Project Chronos](https://github.com/anomalyco/chronos) (ICU Early Warning System) is integrated as a feature module within the platform via a NestJS "Chronos Bridge" that calls the existing FastAPI engine (port 8000).
 
@@ -27,7 +27,7 @@
  ┌──────────────────────────────────────────────────────────────────────────┐
  │                        NestJS API Gateway (port 3000)                      │
  │  • Queue Module          • Docs Module        • Meds Module               │
- │  • Risk Module           • Chronos Bridge      • Auth + RBAC               │
+ │  • WardSync Module       • Chronos Bridge      • Auth + RBAC               │
  │  • FHIR Integration      • Redis Pub/Sub        • PostgreSQL               │
  └───────────────┬──────────────────────────────────────────┬───────────────┘
                  │                                           │
@@ -35,7 +35,7 @@
         ┌───────────────────┐                  ┌────────────────────────────┐
         │  PostgreSQL / Redis│                  │  Existing Chronos (FastAPI) │
         │  (patients, meds,  │                  │  ICU Early Warning, 8000    │
-        │   docs, risk, calc)│                  └────────────────────────────┘
+        │   docs, devices)  │                  └────────────────────────────┘
         └───────────────────┘
 ```
 
@@ -47,7 +47,7 @@
 | **Smart Digital Queues** | **Rules** | ESI triage, bed assignment, acuity + wait-time weighting |
 | **Clinical Documentation** | **ML + Rules** | TipTap editor + Whisper (future) voice; ClinicalBERT NER; structured data → FHIR |
 | **Medication Reconciliation** | **Rules** | RxNorm exact/fuzzy matching, DrugBank DDI, allergy cross-check |
-| **Risk Assessment** | **Mixed** | ASCVD/KDIGO/LACE clinical calculators (rules) + LightGBM readmission (ML) |
+| **WardSync** | **Rules** | General-ward device state + NEWS2 trend correlation with evidence-backed review flags |
 
 ## Frontend Structure
 
@@ -167,17 +167,17 @@ sanctuary-plus/
 │   │   │   │   ├── QueuePage.tsx
 │   │   │   │   ├── DocumentationPage.tsx
 │   │   │   │   ├── MedicationsPage.tsx
-│   │   │   │   ├── RiskPage.tsx
+│   │   │   │   ├── WardSyncPage.tsx
 │   │   │   │   └── ChronosPage.tsx
 │   │   │   ├── components/     # Per-feature subfolders (dashboard/ queue/ documentation/
-│   │   │   │                   #   medications/ risk/ chronos/) — reserved for future
+│   │   │   │                   #   medications/ wardsync/ chronos/) — reserved for future
 │   │   │   │                   #   component extraction; feature code currently lives in pages/
 │   │   │   └── styles/
 │   │   │       └── global.css
 │   │   ├── package.json
 │   │   └── tsconfig.json
 │   ├── backend/                # NestJS 12 API Gateway (Nx project: "backend", port 3000)
-│   │   └── src/                # queue, docs, meds, risk, chronos-bridge modules
+│   │   └── src/                # chronos bridge + wardwatch modules
 │
 ├── packages/
 │   ├── shared/                 # Shared TS types/models
@@ -258,7 +258,7 @@ Before the deploy stage can succeed end-to-end, update those references from `we
 **ML** where it adds value:
 - **Chronos** — the project's key differentiator; already trained ensembles.
 - **Documentation NLP** — free-text needs ClinicalBERT / Whisper.
-- **Risk** — LightGBM readmission risk augments the clinical calculators.
+- **WardSync** — deterministic NEWS2 scoring and device-state correlation produce auditable ward review flags.
 
 ## License
 

@@ -7,11 +7,12 @@ import {
   Shield,
   Heart,
   Menu,
+  RadioTower,
 } from 'lucide-react';
 import QueuePage from './pages/QueuePage';
 import DocumentationPage from './pages/DocumentationPage';
 import MedicationsPage from './pages/MedicationsPage';
-import RiskPage from './pages/RiskPage';
+import WardSyncPage from './pages/WardSyncPage';
 import ChronosPage from './pages/ChronosPage';
 import DashboardPage from './pages/DashboardPage';
 
@@ -20,27 +21,32 @@ const NAV_ITEMS = [
   { id: 'queue', label: 'Queue', icon: Users },
   { id: 'documentation', label: 'Documentation', icon: Pill },
   { id: 'medications', label: 'Medications', icon: Shield },
-  { id: 'risk', label: 'Risk', icon: Heart },
+  { id: 'wardsync', label: 'WardSync', icon: RadioTower },
   { id: 'chronos', label: 'Chronos ICU', icon: Heart },
 ] as const;
 
 export default function App() {
   const [activePanel, setActivePanel] = useState<
-    'dashboard' | 'queue' | 'documentation' | 'medications' | 'risk' | 'chronos'
+    | 'dashboard'
+    | 'queue'
+    | 'documentation'
+    | 'medications'
+    | 'wardsync'
+    | 'chronos'
   >('dashboard');
 
   const renderPanel = () => {
     switch (activePanel) {
       case 'dashboard':
-        return <DashboardPage />;
+        return <DashboardPage onNavigate={setActivePanel} />;
       case 'queue':
         return <QueuePage />;
       case 'documentation':
         return <DocumentationPage />;
       case 'medications':
         return <MedicationsPage />;
-      case 'risk':
-        return <RiskPage />;
+      case 'wardsync':
+        return <WardSyncPage />;
       case 'chronos':
         return <ChronosPage />;
       default:
