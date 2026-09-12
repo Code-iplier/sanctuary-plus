@@ -13,6 +13,14 @@ import {
   User,
   RefreshCw,
   Volume2,
+  Activity,
+  HeartPulse,
+  Pill,
+  AlertTriangle,
+  History,
+  Plus,
+  X,
+  Edit3,
 } from 'lucide-react';
 
 export type EncounterStatus = 'draft' | 'reviewed' | 'finalized';
@@ -22,6 +30,23 @@ export type EncounterType =
   | 'emergency'
   | 'telehealth'
   | 'ambulatory';
+
+export interface ClinicalVitalSign {
+  name: string;
+  value: string;
+  unit?: string;
+}
+
+export interface ClinicalExtraction {
+  symptoms: string[];
+  clinicalFindings: string[];
+  vitals: ClinicalVitalSign[];
+  currentMedications: string[];
+  allergies: string[];
+  history: string[];
+  extractedAt?: string;
+  rawExtractionJson?: string;
+}
 
 export interface ClinicalEncounter {
   id: string;
@@ -36,6 +61,7 @@ export interface ClinicalEncounter {
   transcriptReviewed?: boolean;
   reviewedAt?: string;
   reviewedByClinicianId?: string;
+  extraction?: ClinicalExtraction;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,6 +80,26 @@ const INITIAL_ENCOUNTERS: ClinicalEncounter[] = [
     transcriptReviewed: true,
     reviewedAt: new Date(Date.now() - 3600000).toISOString(),
     reviewedByClinicianId: 'doc-smith',
+    extraction: {
+      symptoms: [
+        'Crushing chest pressure radiating to left arm',
+        'Dyspnea (shortness of breath)',
+        'Diaphoresis (cold sweats)',
+      ],
+      clinicalFindings: [
+        'Acute discomfort during stair climbing exertion',
+        'Diaphoretic presentation',
+      ],
+      vitals: [
+        { name: 'Blood Pressure', value: '142/88', unit: 'mmHg' },
+        { name: 'Heart Rate', value: '98', unit: 'bpm' },
+        { name: 'Oxygen Saturation', value: '96', unit: '%' },
+      ],
+      currentMedications: ['Aspirin 81mg daily', 'Atorvastatin 40mg'],
+      allergies: ['Penicillin (causes hives)'],
+      history: ['Coronary artery disease', 'Hypertension'],
+      extractedAt: new Date(Date.now() - 3600000).toISOString(),
+    },
     createdAt: new Date(Date.now() - 7200000).toISOString(),
     updatedAt: new Date(Date.now() - 3600000).toISOString(),
   },
@@ -70,6 +116,15 @@ const INITIAL_ENCOUNTERS: ClinicalEncounter[] = [
     transcriptReviewed: true,
     reviewedAt: new Date(Date.now() - 82800000).toISOString(),
     reviewedByClinicianId: 'doc-smith',
+    extraction: {
+      symptoms: ['No dizziness', 'No headaches'],
+      clinicalFindings: ['Stable outpatient blood pressure'],
+      vitals: [{ name: 'Blood Pressure', value: '125/80', unit: 'mmHg' }],
+      currentMedications: ['Lisinopril 20mg daily'],
+      allergies: ['No known drug allergies (NKDA)'],
+      history: ['Essential hypertension'],
+      extractedAt: new Date(Date.now() - 82800000).toISOString(),
+    },
     createdAt: new Date(Date.now() - 86400000).toISOString(),
     updatedAt: new Date(Date.now() - 82800000).toISOString(),
   },
@@ -94,6 +149,22 @@ export default function DocumentationPage() {
   const [selectedEncounterId, setSelectedEncounterId] = useState<string>('enc-103');
   const [editableTranscript, setEditableTranscript] = useState<string>('');
 
+  // Phase 3: Clinical Extraction state
+  const [extraction, setExtraction] = useState<ClinicalExtraction | null>(null);
+  const [isExtracting, setIsExtracting] = useState<boolean>(false);
+  const [isSavingExtraction, setIsSavingExtraction] = useState<boolean>(false);
+  const [isEditingExtraction, setIsEditingExtraction] = useState<boolean>(false);
+
+  // New item inputs for each category in extraction editor
+  const [newSymptom, setNewSymptom] = useState<string>('');
+  const [newFinding, setNewFinding] = useState<string>('');
+  const [newMedication, setNewMedication] = useState<string>('');
+  const [newAllergy, setNewAllergy] = useState<string>('');
+  const [newHistory, setNewHistory] = useState<string>('');
+  const [newVitalName, setNewVitalName] = useState<string>('');
+  const [newVitalValue, setNewVitalValue] = useState<string>('');
+  const [newVitalUnit, setNewVitalUnit] = useState<string>('');
+
   // Audio recording state
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
@@ -117,10 +188,12 @@ export default function DocumentationPage() {
   const activeEncounter =
     encounters.find((e) => e.id === selectedEncounterId) || encounters[0];
 
-  // Load active encounter transcript into editor
+  // Load active encounter transcript & extraction into editor
   useEffect(() => {
     if (activeEncounter) {
       setEditableTranscript(activeEncounter.rawTranscript || '');
+      setExtraction(activeEncounter.extraction || null);
+      setIsEditingExtraction(false);
       setAudioBlob(null);
       setAudioUrl(null);
       setUploadedFileName(null);
@@ -406,6 +479,197 @@ export default function DocumentationPage() {
     }
   };
 
+  // Real Phase 3: Clinical Information Extraction from Transcript
+  const handleExtractClinicalInformation = async () => {
+    const transcriptText = editableTranscript.trim();
+    if (!transcriptText || transcriptText.length < 10) {
+      setAlertInfo({
+        type: 'warning',
+        message:
+          'Transcript is too short or empty for clinical information extraction. Please provide consultation text first.',
+      });
+      return;
+    }
+
+    setIsExtracting(true);
+    setAlertInfo(null);
+
+    try {
+      // Ensure backend has current transcript if it was modified
+      if (editableTranscript !== activeEncounter.rawTranscript) {
+        await fetch(`/api/encounters/${activeEncounter.id}/transcript`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transcript: editableTranscript,
+            clinicianId: activeEncounter.clinicianId || 'doc-smith',
+          }),
+        });
+      }
+
+      const response = await fetch(
+        `/api/encounters/${activeEncounter.id}/extract`,
+        {
+          method: 'POST',
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `Clinical extraction failed (HTTP ${response.status})`,
+        );
+      }
+
+      const extractedData: ClinicalExtraction = await response.json();
+      setExtraction(extractedData);
+      setIsEditingExtraction(false);
+
+      // Update in encounters list
+      setEncounters((prev) =>
+        prev.map((enc) =>
+          enc.id === activeEncounter.id
+            ? {
+                ...enc,
+                extraction: extractedData,
+                rawTranscript: editableTranscript,
+                updatedAt: new Date().toISOString(),
+              }
+            : enc,
+        ),
+      );
+
+      setAlertInfo({
+        type: 'success',
+        message:
+          'Clinical information successfully extracted with Gemini NLP. Review and edit structured entities below.',
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAlertInfo({
+        type: 'danger',
+        message: `Clinical extraction failed: ${error.message}`,
+      });
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  // Save clinician-edited extraction entities
+  const handleSaveExtraction = async () => {
+    if (!extraction) return;
+
+    setIsSavingExtraction(true);
+    setAlertInfo(null);
+
+    try {
+      const response = await fetch(
+        `/api/encounters/${activeEncounter.id}/extraction`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ extraction }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `Failed to save extraction (HTTP ${response.status})`,
+        );
+      }
+
+      const updatedEncounter: ClinicalEncounter = await response.json();
+      setEncounters((prev) =>
+        prev.map((enc) =>
+          enc.id === activeEncounter.id ? updatedEncounter : enc,
+        ),
+      );
+      setExtraction(updatedEncounter.extraction || extraction);
+      setIsEditingExtraction(false);
+
+      setAlertInfo({
+        type: 'success',
+        message: `Extracted clinical entities successfully saved and updated for Encounter ${activeEncounter.id}.`,
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAlertInfo({
+        type: 'danger',
+        message: `Failed to save extraction: ${error.message}`,
+      });
+    } finally {
+      setIsSavingExtraction(false);
+    }
+  };
+
+  // Entity editing helper functions
+  const handleRemoveEntityItem = (
+    field:
+      | 'symptoms'
+      | 'clinicalFindings'
+      | 'currentMedications'
+      | 'allergies'
+      | 'history',
+    index: number,
+  ) => {
+    if (!extraction) return;
+    const updatedList = [...extraction[field]];
+    updatedList.splice(index, 1);
+    setExtraction({
+      ...extraction,
+      [field]: updatedList,
+    });
+  };
+
+  const handleAddEntityItem = (
+    field:
+      | 'symptoms'
+      | 'clinicalFindings'
+      | 'currentMedications'
+      | 'allergies'
+      | 'history',
+    value: string,
+    setter: (val: string) => void,
+  ) => {
+    if (!value.trim() || !extraction) return;
+    setExtraction({
+      ...extraction,
+      [field]: [...extraction[field], value.trim()],
+    });
+    setter('');
+  };
+
+  const handleRemoveVital = (index: number) => {
+    if (!extraction) return;
+    const updatedVitals = [...extraction.vitals];
+    updatedVitals.splice(index, 1);
+    setExtraction({
+      ...extraction,
+      vitals: updatedVitals,
+    });
+  };
+
+  const handleAddVital = () => {
+    if (!newVitalName.trim() || !newVitalValue.trim() || !extraction) return;
+    setExtraction({
+      ...extraction,
+      vitals: [
+        ...extraction.vitals,
+        {
+          name: newVitalName.trim(),
+          value: newVitalValue.trim(),
+          unit: newVitalUnit.trim() || undefined,
+        },
+      ],
+    });
+    setNewVitalName('');
+    setNewVitalValue('');
+    setNewVitalUnit('');
+  };
+
   const formatSeconds = (sec: number) => {
     const m = Math.floor(sec / 60)
       .toString()
@@ -443,7 +707,7 @@ export default function DocumentationPage() {
               </Badge>
             </div>
             <p className="text-sm text-gray-500 mt-1">
-              Phase 2: Verbatim doctor-patient audio capture & Gemini Flash transcription
+              Phases 2 & 3: Consultation Audio Transcription & Clinical Information Extraction
             </p>
           </div>
 
@@ -662,18 +926,511 @@ export default function DocumentationPage() {
                   )}
                 </div>
 
-                <Button
-                  variant="primary"
-                  onPress={handleSaveReviewedTranscript}
-                  isDisabled={isSaving || !editableTranscript.trim()}
-                  className="flex items-center gap-1.5 w-full sm:w-auto"
-                >
-                  <Save size={16} />
-                  {isSaving ? 'Saving...' : 'Save Reviewed Transcript'}
-                </Button>
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                  <Button
+                    variant="primary"
+                    onPress={handleSaveReviewedTranscript}
+                    isDisabled={isSaving || !editableTranscript.trim()}
+                    className="flex items-center gap-1.5"
+                  >
+                    <Save size={16} />
+                    {isSaving ? 'Saving...' : 'Save Transcript'}
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    onPress={handleExtractClinicalInformation}
+                    isDisabled={isExtracting || !editableTranscript.trim()}
+                    className="flex items-center gap-1.5"
+                  >
+                    {isExtracting ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin" />
+                        Extracting...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={16} />
+                        Extract Clinical Information
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </Card>
           </div>
+
+          {/* Step 3: Extracted Clinical Information Section */}
+          <Card className="p-5 mt-4 flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-gray-200 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-primary/10 text-primary">
+                  <Activity size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-semibold">
+                      3. Extracted Clinical Information
+                    </h3>
+                    {extraction ? (
+                      <Badge color="success" variant="soft">
+                        NLP Extracted
+                      </Badge>
+                    ) : (
+                      <Badge color="default" variant="soft">
+                        Awaiting Extraction
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Structured extraction of symptoms, findings, vitals, medications, allergies, and history from consultation transcript.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {extraction && (
+                  <>
+                    {!isEditingExtraction ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => setIsEditingExtraction(true)}
+                        className="flex items-center gap-1.5 text-xs"
+                      >
+                        <Edit3 size={14} />
+                        Edit Entities
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onPress={() => {
+                            setExtraction(activeEncounter.extraction || null);
+                            setIsEditingExtraction(false);
+                          }}
+                          className="flex items-center gap-1 text-xs"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onPress={handleSaveExtraction}
+                          isDisabled={isSavingExtraction}
+                          className="flex items-center gap-1.5 text-xs"
+                        >
+                          <Save size={14} />
+                          {isSavingExtraction ? 'Saving...' : 'Save Entities'}
+                        </Button>
+                      </>
+                    )}
+                  </>
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={handleExtractClinicalInformation}
+                  isDisabled={isExtracting || !editableTranscript.trim()}
+                  className="flex items-center gap-1.5 text-xs"
+                >
+                  {isExtracting ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      Extracting...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={14} />
+                      Re-extract with Gemini
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {!extraction ? (
+              <div className="p-8 rounded-xl border border-dashed border-gray-300 dark:border-zinc-700 flex flex-col items-center justify-center text-center gap-2">
+                <Activity size={32} className="text-gray-400" />
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                  No clinical entities extracted for this encounter yet.
+                </p>
+                <p className="text-xs text-gray-500 max-w-md">
+                  Capture audio or enter transcript above, then click &quot;Extract Clinical Information&quot; to parse symptoms, clinical findings, vital signs, medications, allergies, and history with Gemini NLP.
+                </p>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onPress={handleExtractClinicalInformation}
+                  isDisabled={isExtracting || !editableTranscript.trim()}
+                  className="mt-2 flex items-center gap-1.5"
+                >
+                  <Sparkles size={14} />
+                  Extract Clinical Information Now
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Category 1: Symptoms */}
+                <div className="p-4 rounded-xl border border-sky-200 dark:border-sky-900/50 bg-sky-50/50 dark:bg-sky-950/20 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-sky-800 dark:text-sky-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Activity size={14} />
+                      Symptoms & Complaints ({extraction.symptoms.length})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 min-h-[48px]">
+                    {extraction.symptoms.length === 0 ? (
+                      <span className="text-xs text-gray-400 italic">None reported</span>
+                    ) : (
+                      extraction.symptoms.map((symptom, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-sky-100 dark:bg-sky-900/60 text-sky-900 dark:text-sky-200 border border-sky-300 dark:border-sky-800"
+                        >
+                          {symptom}
+                          {isEditingExtraction && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEntityItem('symptoms', idx)}
+                              className="hover:text-red-500 ml-0.5"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                  {isEditingExtraction && (
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-sky-200 dark:border-sky-900/40">
+                      <input
+                        type="text"
+                        placeholder="Add symptom..."
+                        value={newSymptom}
+                        onChange={(e) => setNewSymptom(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddEntityItem('symptoms', newSymptom, setNewSymptom);
+                          }
+                        }}
+                        className="text-xs flex-1 px-2 py-1 rounded border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddEntityItem('symptoms', newSymptom, setNewSymptom)}
+                        className="p-1 rounded bg-sky-600 text-white hover:bg-sky-700 text-xs"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Category 2: Clinical Findings */}
+                <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-indigo-800 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Activity size={14} />
+                      Clinical Findings ({extraction.clinicalFindings.length})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 min-h-[48px]">
+                    {extraction.clinicalFindings.length === 0 ? (
+                      <span className="text-xs text-gray-400 italic">No specific findings</span>
+                    ) : (
+                      extraction.clinicalFindings.map((finding, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 dark:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 border border-indigo-300 dark:border-indigo-800"
+                        >
+                          {finding}
+                          {isEditingExtraction && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEntityItem('clinicalFindings', idx)}
+                              className="hover:text-red-500 ml-0.5"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                  {isEditingExtraction && (
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-indigo-200 dark:border-indigo-900/40">
+                      <input
+                        type="text"
+                        placeholder="Add clinical finding..."
+                        value={newFinding}
+                        onChange={(e) => setNewFinding(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddEntityItem('clinicalFindings', newFinding, setNewFinding);
+                          }
+                        }}
+                        className="text-xs flex-1 px-2 py-1 rounded border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddEntityItem('clinicalFindings', newFinding, setNewFinding)}
+                        className="p-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 text-xs"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Category 3: Vital Signs */}
+                <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-rose-800 dark:text-rose-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <HeartPulse size={14} />
+                      Vital Signs ({extraction.vitals.length})
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1.5 min-h-[48px]">
+                    {extraction.vitals.length === 0 ? (
+                      <span className="text-xs text-gray-400 italic">No vitals documented</span>
+                    ) : (
+                      extraction.vitals.map((vital, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between px-2.5 py-1 rounded-md bg-rose-100/70 dark:bg-rose-900/50 text-rose-900 dark:text-rose-200 border border-rose-300 dark:border-rose-800 text-xs"
+                        >
+                          <span className="font-medium">{vital.name}:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold">
+                              {vital.value} {vital.unit || ''}
+                            </span>
+                            {isEditingExtraction && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveVital(idx)}
+                                className="hover:text-red-500"
+                              >
+                                <X size={12} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {isEditingExtraction && (
+                    <div className="flex flex-col gap-1 pt-2 border-t border-rose-200 dark:border-rose-900/40">
+                      <div className="grid grid-cols-3 gap-1">
+                        <input
+                          type="text"
+                          placeholder="Name (e.g. BP)"
+                          value={newVitalName}
+                          onChange={(e) => setNewVitalName(e.target.value)}
+                          className="text-xs px-1.5 py-1 rounded border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Value (e.g. 120/80)"
+                          value={newVitalValue}
+                          onChange={(e) => setNewVitalValue(e.target.value)}
+                          className="text-xs px-1.5 py-1 rounded border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Unit (e.g. mmHg)"
+                          value={newVitalUnit}
+                          onChange={(e) => setNewVitalUnit(e.target.value)}
+                          className="text-xs px-1.5 py-1 rounded border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddVital}
+                        className="mt-1 py-1 rounded bg-rose-600 text-white hover:bg-rose-700 text-xs flex items-center justify-center gap-1"
+                      >
+                        <Plus size={12} /> Add Vital Sign
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Category 4: Current Medications */}
+                <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Pill size={14} />
+                      Current Medications ({extraction.currentMedications.length})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 min-h-[48px]">
+                    {extraction.currentMedications.length === 0 ? (
+                      <span className="text-xs text-gray-400 italic">None mentioned</span>
+                    ) : (
+                      extraction.currentMedications.map((med, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800"
+                        >
+                          {med}
+                          {isEditingExtraction && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEntityItem('currentMedications', idx)}
+                              className="hover:text-red-500 ml-0.5"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                  {isEditingExtraction && (
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-emerald-200 dark:border-emerald-900/40">
+                      <input
+                        type="text"
+                        placeholder="Add medication..."
+                        value={newMedication}
+                        onChange={(e) => setNewMedication(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddEntityItem('currentMedications', newMedication, setNewMedication);
+                          }
+                        }}
+                        className="text-xs flex-1 px-2 py-1 rounded border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddEntityItem('currentMedications', newMedication, setNewMedication)}
+                        className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 text-xs"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Category 5: Allergies */}
+                <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <AlertTriangle size={14} />
+                      Documented Allergies ({extraction.allergies.length})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 min-h-[48px]">
+                    {extraction.allergies.length === 0 ? (
+                      <span className="text-xs text-gray-400 italic">No known allergies (NKDA)</span>
+                    ) : (
+                      extraction.allergies.map((allergy, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800"
+                        >
+                          {allergy}
+                          {isEditingExtraction && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEntityItem('allergies', idx)}
+                              className="hover:text-red-500 ml-0.5"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                  {isEditingExtraction && (
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-amber-200 dark:border-amber-900/40">
+                      <input
+                        type="text"
+                        placeholder="Add allergy..."
+                        value={newAllergy}
+                        onChange={(e) => setNewAllergy(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddEntityItem('allergies', newAllergy, setNewAllergy);
+                          }
+                        }}
+                        className="text-xs flex-1 px-2 py-1 rounded border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddEntityItem('allergies', newAllergy, setNewAllergy)}
+                        className="p-1 rounded bg-amber-600 text-white hover:bg-amber-700 text-xs"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Category 6: Medical History */}
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <History size={14} />
+                      Medical History ({extraction.history.length})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 min-h-[48px]">
+                    {extraction.history.length === 0 ? (
+                      <span className="text-xs text-gray-400 italic">None documented</span>
+                    ) : (
+                      extraction.history.map((hist, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700"
+                        >
+                          {hist}
+                          {isEditingExtraction && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEntityItem('history', idx)}
+                              className="hover:text-red-500 ml-0.5"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                  {isEditingExtraction && (
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+                      <input
+                        type="text"
+                        placeholder="Add medical history..."
+                        value={newHistory}
+                        onChange={(e) => setNewHistory(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddEntityItem('history', newHistory, setNewHistory);
+                          }
+                        }}
+                        className="text-xs flex-1 px-2 py-1 rounded border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddEntityItem('history', newHistory, setNewHistory)}
+                        className="p-1 rounded bg-slate-700 text-white hover:bg-slate-800 text-xs"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </Card>
         </Tabs.Panel>
 
         {/* Tab 2: Clinical Consultation Templates */}

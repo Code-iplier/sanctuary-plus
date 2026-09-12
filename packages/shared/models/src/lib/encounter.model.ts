@@ -14,6 +14,23 @@ export interface TranscriptionSegment {
   text: string;
 }
 
+export interface ClinicalVitalSign {
+  name: string;
+  value: string;
+  unit?: string;
+}
+
+export interface ClinicalExtraction {
+  symptoms: string[];
+  clinicalFindings: string[];
+  vitals: ClinicalVitalSign[];
+  currentMedications: string[];
+  allergies: string[];
+  history: string[];
+  rawExtractionJson?: string;
+  extractedAt?: string;
+}
+
 export interface ClinicalEncounter {
   id: string;
   patientId: string;
@@ -27,6 +44,7 @@ export interface ClinicalEncounter {
   transcriptReviewed?: boolean;
   reviewedAt?: string;
   reviewedByClinicianId?: string;
+  extraction?: ClinicalExtraction;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +56,7 @@ export interface CreateEncounterDto {
   rawTranscript?: string;
   audioDurationSeconds?: number;
   transcriptConfidence?: number;
+  extraction?: ClinicalExtraction;
 }
 
 export interface UpdateEncounterDto {
@@ -48,6 +67,7 @@ export interface UpdateEncounterDto {
   audioDurationSeconds?: number;
   transcriptConfidence?: number;
   transcriptReviewed?: boolean;
+  extraction?: ClinicalExtraction;
 }
 
 export interface TranscribeAudioDto {
@@ -69,4 +89,8 @@ export interface TranscriptionResponseDto {
 export interface UpdateTranscriptDto {
   transcript: string;
   clinicianId?: string;
+}
+
+export interface UpdateExtractionDto {
+  extraction: ClinicalExtraction;
 }

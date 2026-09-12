@@ -19,6 +19,8 @@ import type {
   TranscribeAudioDto,
   TranscriptionResponseDto,
   UpdateTranscriptDto,
+  ClinicalExtraction,
+  UpdateExtractionDto,
 } from './documentation.types';
 
 @Controller('encounters')
@@ -81,5 +83,22 @@ export class DocumentationController {
       dto.transcript,
       dto.clinicianId,
     );
+  }
+
+  @Post(':id/extract')
+  @HttpCode(HttpStatus.OK)
+  async extractClinicalInformation(
+    @Param('id') id: string,
+  ): Promise<ClinicalExtraction> {
+    return this.documentationService.extractClinicalInformation(id);
+  }
+
+  @Put(':id/extraction')
+  @HttpCode(HttpStatus.OK)
+  async updateExtraction(
+    @Param('id') id: string,
+    @Body() dto: UpdateExtractionDto,
+  ): Promise<ClinicalEncounter> {
+    return this.documentationService.updateExtraction(id, dto.extraction);
   }
 }

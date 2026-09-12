@@ -5,6 +5,10 @@ import {
   TranscriptionProvider,
   GeminiTranscriptionProvider,
 } from './transcription.provider';
+import {
+  ExtractionProvider,
+  GeminiExtractionProvider,
+} from './extraction.provider';
 
 @Module({
   controllers: [DocumentationController],
@@ -14,7 +18,11 @@ import {
       provide: TranscriptionProvider,
       useClass: GeminiTranscriptionProvider,
     },
+    {
+      provide: ExtractionProvider,
+      useClass: GeminiExtractionProvider,
+    },
   ],
-  exports: [DocumentationService, TranscriptionProvider],
+  exports: [DocumentationService, TranscriptionProvider, ExtractionProvider],
 })
 export class DocumentationModule {}

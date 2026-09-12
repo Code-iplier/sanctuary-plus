@@ -8,4 +8,7 @@ export type {
   TranscriptionResponseDto,
   TranscriptionSegment,
   UpdateTranscriptDto,
+  ClinicalVitalSign,
+  ClinicalExtraction,
+  UpdateExtractionDto,
 } from '@org/models';

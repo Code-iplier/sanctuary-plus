@@ -10,8 +10,10 @@ import type {
   UpdateEncounterDto,
   TranscribeAudioDto,
   TranscriptionResponseDto,
+  ClinicalExtraction,
 } from './documentation.types';
 import { TranscriptionProvider } from './transcription.provider';
+import { ExtractionProvider } from './extraction.provider';
 
 @Injectable()
 export class DocumentationService {
@@ -22,6 +24,7 @@ export class DocumentationService {
 
   constructor(
     private readonly transcriptionProvider: TranscriptionProvider,
+    private readonly extractionProvider: ExtractionProvider,
   ) {
     this.seedInitialEncounters();
   }
@@ -46,6 +49,24 @@ export class DocumentationService {
         transcriptReviewed: true,
         reviewedAt: new Date(Date.now() - 3600000).toISOString(),
         reviewedByClinicianId: 'doc-smith',
+        extraction: {
+          symptoms: [
+            'Intense crushing chest pressure',
+            'Pain radiating to left arm',
+            'Shortness of breath',
+            'Cold sweats',
+          ],
+          clinicalFindings: ['Diaphoresis', 'Respiratory distress'],
+          vitals: [
+            { name: 'Blood Pressure', value: '164/98', unit: 'mmHg' },
+            { name: 'Heart Rate', value: '102', unit: 'bpm' },
+            { name: 'SpO2', value: '94', unit: '%' },
+          ],
+          currentMedications: ['Lisinopril 20mg daily', 'Atorvastatin 40mg'],
+          allergies: ['Penicillin (hives)'],
+          history: ['Hypertension for 5 years'],
+          extractedAt: new Date(Date.now() - 3500000).toISOString(),
+        },
         createdAt: new Date(Date.now() - 7200000).toISOString(),
         updatedAt: new Date(Date.now() - 3600000).toISOString(),
       },
@@ -65,6 +86,17 @@ export class DocumentationService {
         transcriptReviewed: true,
         reviewedAt: new Date(Date.now() - 82800000).toISOString(),
         reviewedByClinicianId: 'doc-smith',
+        extraction: {
+          symptoms: ['No dizziness', 'No headaches'],
+          clinicalFindings: ['Stable clinical course'],
+          vitals: [
+            { name: 'Blood Pressure', value: '125/80', unit: 'mmHg' },
+          ],
+          currentMedications: ['Lisinopril 20mg daily'],
+          allergies: [],
+          history: ['Essential hypertension'],
+          extractedAt: new Date(Date.now() - 82700000).toISOString(),
+        },
         createdAt: new Date(Date.now() - 86400000).toISOString(),
         updatedAt: new Date(Date.now() - 82800000).toISOString(),
       },
@@ -127,6 +159,7 @@ export class DocumentationService {
       audioDurationSeconds: dto.audioDurationSeconds || 0,
       transcriptConfidence: dto.transcriptConfidence || 0,
       transcriptReviewed: false,
+      extraction: dto.extraction,
       createdAt: now,
       updatedAt: now,
     };
@@ -148,7 +181,8 @@ export class DocumentationService {
       clinicianId: dto.clinicianId || encounter.clinicianId,
       type: dto.type || encounter.type,
       status: dto.status || encounter.status,
-      rawTranscript: dto.rawTranscript !== undefined ? dto.rawTranscript : encounter.rawTranscript,
+      rawTranscript:
+        dto.rawTranscript !== undefined ? dto.rawTranscript : encounter.rawTranscript,
       audioDurationSeconds:
         dto.audioDurationSeconds !== undefined
           ? dto.audioDurationSeconds
@@ -161,6 +195,7 @@ export class DocumentationService {
         dto.transcriptReviewed !== undefined
           ? dto.transcriptReviewed
           : encounter.transcriptReviewed,
+      extraction: dto.extraction !== undefined ? dto.extraction : encounter.extraction,
       updatedAt: now,
     };
 
@@ -231,6 +266,53 @@ export class DocumentationService {
 
     this.encounters.set(id, encounter);
     this.logger.log(`Updated and reviewed transcript for encounter ${id}`);
+    return encounter;
+  }
+
+  async extractClinicalInformation(id: string): Promise<ClinicalExtraction> {
+    const encounter = await this.getEncounterById(id);
+
+    if (!encounter.rawTranscript || encounter.rawTranscript.trim().length < 10) {
+      throw new BadRequestException(
+        'Encounter transcript is empty or too short for extraction. Please transcribe consultation audio first.',
+      );
+    }
+
+    this.logger.log(
+      `Extracting clinical information for encounter ${id} (transcript length: ${encounter.rawTranscript.length})`,
+    );
+
+    const extraction = await this.extractionProvider.extractClinicalInformation(
+      encounter.rawTranscript,
+    );
+
+    const now = new Date().toISOString();
+    encounter.extraction = extraction;
+    encounter.updatedAt = now;
+
+    this.encounters.set(id, encounter);
+    this.logger.log(
+      `Encounter ${id} updated with extraction: ${extraction.symptoms.length} symptoms, ${extraction.clinicalFindings.length} findings, ${extraction.vitals.length} vitals`,
+    );
+
+    return extraction;
+  }
+
+  async updateExtraction(
+    id: string,
+    extraction: ClinicalExtraction,
+  ): Promise<ClinicalEncounter> {
+    const encounter = await this.getEncounterById(id);
+    const now = new Date().toISOString();
+
+    encounter.extraction = {
+      ...extraction,
+      extractedAt: extraction.extractedAt || now,
+    };
+    encounter.updatedAt = now;
+
+    this.encounters.set(id, encounter);
+    this.logger.log(`Updated clinical extraction for encounter ${id}`);
     return encounter;
   }
 }
