@@ -45,6 +45,26 @@ export class ChronosService {
     });
   }
 
+  /** Preserve Chronos's patient roster contract through the Sanctuary gateway. */
+  async getPatients(): Promise<{ active_patients: string[]; count: number }> {
+    return this.fetchWithTimeout<{ active_patients: string[]; count: number }>(
+      `${this.baseUrl}/patients`,
+    );
+  }
+
+  /** Preserve the rolling raw-vitals history required by the patient detail view. */
+  async getPatientHistory(patientId: string): Promise<{
+    patient_id: string;
+    n_rows: number;
+    history: unknown[];
+  }> {
+    return this.fetchWithTimeout<{
+      patient_id: string;
+      n_rows: number;
+      history: unknown[];
+    }>(`${this.baseUrl}/patient/${encodeURIComponent(patientId)}/history`);
+  }
+
   private async fetchWithTimeout<T>(url: string, init: RequestInit = {}): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);

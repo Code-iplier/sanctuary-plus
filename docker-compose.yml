@@ -25,6 +25,10 @@ services:
       - '8000'
     environment:
       PORT: 8000
+      # Mount a local MIMIC demo directory here; it is intentionally gitignored.
+      CHRONOS_DATA_DIR: /app/data
+    volumes:
+      - ${CHRONOS_DATA_PATH:-./services/chronos/data}:/app/data:ro
     healthcheck:
       test:
         [

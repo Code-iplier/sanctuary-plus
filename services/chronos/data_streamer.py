@@ -21,6 +21,7 @@ import json
 import httpx
 import asyncio
 import argparse
+import os
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -31,8 +32,11 @@ from loguru import logger
 # ─────────────────────────────────────────────
 # Config
 # ─────────────────────────────────────────────
-DATA_DIR   = Path(__file__).parent / "data"
-API_BASE   = "http://localhost:8000"
+# The container mounts its optional, local-only demo data at /app/data.  Keeping
+# this configurable is essential: the source datasets are deliberately ignored
+# and must never be baked into an image or hard-coded to a developer checkout.
+DATA_DIR = Path(os.getenv("CHRONOS_DATA_DIR", Path(__file__).parent / "data"))
+API_BASE = os.getenv("CHRONOS_API_BASE", "http://localhost:8000")
 
 # MIMIC item IDs for vital sign chart events
 # MIMIC-IV MetaVision IDs (220xxx) + MIMIC-III CareVue legacy IDs
