@@ -93,6 +93,7 @@ export interface ClinicalEncounter {
   soapNote?: SoapNote;
   prescriptions?: PrescriptionItem[];
   clinicalImpression?: ClinicalImpression;
+  fhirBundle?: FhirBundle;
   createdAt: string;
   updatedAt: string;
 }
@@ -108,6 +109,7 @@ export interface CreateEncounterDto {
   soapNote?: SoapNote;
   prescriptions?: PrescriptionItem[];
   clinicalImpression?: ClinicalImpression;
+  fhirBundle?: FhirBundle;
 }
 
 export interface UpdateEncounterDto {
@@ -122,6 +124,7 @@ export interface UpdateEncounterDto {
   soapNote?: SoapNote;
   prescriptions?: PrescriptionItem[];
   clinicalImpression?: ClinicalImpression;
+  fhirBundle?: FhirBundle;
 }
 
 export interface TranscribeAudioDto {
@@ -161,4 +164,15 @@ export interface UpdateClinicalImpressionDto {
   clinicalImpression: ClinicalImpression;
 }
 
+export interface FhirBundleEntry {
+  fullUrl?: string;
+  resource: Record<string, unknown>;
+}
 
+export interface FhirBundle {
+  resourceType: 'Bundle';
+  type: 'transaction' | 'collection';
+  timestamp: string;
+  total: number;
+  entry: FhirBundleEntry[];
+}

@@ -15,6 +15,7 @@ import type {
   UpdatePrescriptionsDto,
   ClinicalImpression,
   UpdateClinicalImpressionDto,
+  FhirBundle,
 } from './documentation.types';
 
 describe('DocumentationController', () => {
@@ -47,6 +48,19 @@ describe('DocumentationController', () => {
     ],
     generatedAt: '2026-09-13T00:00:00.000Z',
     isReviewed: false,
+  };
+
+  const mockFhirBundle: FhirBundle = {
+    resourceType: 'Bundle',
+    type: 'collection',
+    timestamp: '2026-09-13T00:00:00.000Z',
+    total: 1,
+    entry: [
+      {
+        fullUrl: 'urn:uuid:enc-101',
+        resource: { resourceType: 'Encounter', id: 'enc-101' },
+      },
+    ],
   };
 
   const mockEncounter: ClinicalEncounter = {
@@ -120,6 +134,8 @@ describe('DocumentationController', () => {
         ...mockEncounter,
         clinicalImpression: mockClinicalImpression,
       }),
+      generateFhirBundle: vi.fn().mockResolvedValue(mockFhirBundle),
+      getFhirBundle: vi.fn().mockResolvedValue(mockFhirBundle),
     } as unknown as DocumentationService;
 
     controller = new DocumentationController(service);
@@ -220,6 +236,18 @@ describe('DocumentationController', () => {
     const result = await controller.updateDiagnoses('enc-101', dto);
     expect(result.clinicalImpression).toEqual(mockClinicalImpression);
     expect(service.updateDiagnoses).toHaveBeenCalledWith('enc-101', mockClinicalImpression);
+  });
+
+  it('should generate FHIR R4 bundle (Phase 7)', async () => {
+    const result = await controller.generateFhirBundle('enc-101');
+    expect(result).toEqual(mockFhirBundle);
+    expect(service.generateFhirBundle).toHaveBeenCalledWith('enc-101');
+  });
+
+  it('should get FHIR R4 bundle (Phase 7)', async () => {
+    const result = await controller.getFhirBundle('enc-101');
+    expect(result).toEqual(mockFhirBundle);
+    expect(service.getFhirBundle).toHaveBeenCalledWith('enc-101');
   });
 });
 

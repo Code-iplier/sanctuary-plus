@@ -27,6 +27,7 @@ import type {
   UpdatePrescriptionsDto,
   ClinicalImpression,
   UpdateClinicalImpressionDto,
+  FhirBundle,
 } from './documentation.types';
 
 
@@ -164,5 +165,20 @@ export class DocumentationController {
       id,
       dto.clinicalImpression,
     );
+  }
+
+  @Post(':id/fhir/generate')
+  @HttpCode(HttpStatus.OK)
+  async generateFhirBundle(
+    @Param('id') id: string,
+  ): Promise<FhirBundle> {
+    return this.documentationService.generateFhirBundle(id);
+  }
+
+  @Get(':id/fhir')
+  async getFhirBundle(
+    @Param('id') id: string,
+  ): Promise<FhirBundle> {
+    return this.documentationService.getFhirBundle(id);
   }
 }

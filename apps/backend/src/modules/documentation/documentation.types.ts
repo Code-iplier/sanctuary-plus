@@ -22,6 +22,8 @@ export type {
   DiagnosisItem,
   ClinicalImpression,
   UpdateClinicalImpressionDto,
+  FhirBundleEntry,
+  FhirBundle,
 } from '@org/models';
 
 

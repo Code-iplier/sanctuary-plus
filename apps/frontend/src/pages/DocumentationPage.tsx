@@ -25,6 +25,13 @@ import {
   Check,
   Ban,
   Stethoscope,
+  Share2,
+  Download,
+  Copy,
+  Code,
+  Layers,
+  FileCode,
+  CheckCheck,
 } from 'lucide-react';
 
 export type EncounterStatus = 'draft' | 'reviewed' | 'finalized';
@@ -70,8 +77,8 @@ export interface PrescriptionItem {
   dosage: string;
   route: string;
   frequency: string;
-  duration: string;
-  instructions: string;
+  duration?: string;
+  instructions?: string;
   status: PrescriptionStatus;
 }
 
@@ -97,6 +104,19 @@ export interface ClinicalImpression {
   isReviewed?: boolean;
 }
 
+export interface FhirBundleEntry {
+  fullUrl?: string;
+  resource: Record<string, unknown>;
+}
+
+export interface FhirBundle {
+  resourceType: 'Bundle';
+  type: 'transaction' | 'collection';
+  timestamp: string;
+  total: number;
+  entry: FhirBundleEntry[];
+}
+
 export interface ClinicalEncounter {
   id: string;
   patientId: string;
@@ -114,6 +134,7 @@ export interface ClinicalEncounter {
   soapNote?: SoapNote;
   prescriptions?: PrescriptionItem[];
   clinicalImpression?: ClinicalImpression;
+  fhirBundle?: FhirBundle;
   createdAt: string;
   updatedAt: string;
 }
@@ -432,6 +453,20 @@ export default function DocumentationPage() {
     message: string;
   } | null>(null);
 
+  // FHIR Interoperability state (Phase 7)
+  const [fhirBundle, setFhirBundle] = useState<FhirBundle | null>(null);
+  const [isGeneratingFhir, setIsGeneratingFhir] = useState<boolean>(false);
+  const [fhirTab, setFhirTab] = useState<
+    | 'all'
+    | 'Condition'
+    | 'Observation'
+    | 'MedicationRequest'
+    | 'AllergyIntolerance'
+    | 'DocumentReference'
+    | 'raw'
+  >('all');
+  const [hasCopiedFhir, setHasCopiedFhir] = useState<boolean>(false);
+
   // MediaRecorder refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -458,6 +493,8 @@ export default function DocumentationPage() {
       setImpressionSummaryText(activeEncounter.clinicalImpression?.summary || '');
       setIsEditingImpression(false);
       setShowAddDiagnosis(false);
+      setFhirBundle(activeEncounter.fhirBundle || null);
+      setHasCopiedFhir(false);
       setAudioBlob(null);
       setAudioUrl(null);
       setUploadedFileName(null);
@@ -1456,6 +1493,77 @@ export default function DocumentationPage() {
     setShowAddDiagnosis(false);
   };
 
+  // Real Phase 7: Deterministic FHIR R4 Bundle Generation
+  const handleGenerateFhirBundle = async () => {
+    setIsGeneratingFhir(true);
+    setAlertInfo(null);
+
+    try {
+      const response = await fetch(
+        `/api/encounters/${activeEncounter.id}/fhir/generate`,
+        {
+          method: 'POST',
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `Failed to generate FHIR bundle (HTTP ${response.status})`,
+        );
+      }
+
+      const bundle: FhirBundle = await response.json();
+      setFhirBundle(bundle);
+
+      // Update active encounter in encounters list
+      setEncounters((prev) =>
+        prev.map((enc) =>
+          enc.id === activeEncounter.id
+            ? { ...enc, fhirBundle: bundle, updatedAt: new Date().toISOString() }
+            : enc,
+        ),
+      );
+
+      setAlertInfo({
+        type: 'success',
+        message: `Successfully synthesized deterministic FHIR R4 Bundle with ${bundle.total} interoperable resources.`,
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAlertInfo({
+        type: 'danger',
+        message: `Failed to generate FHIR bundle: ${error.message}`,
+      });
+    } finally {
+      setIsGeneratingFhir(false);
+    }
+  };
+
+  const handleCopyFhirJson = () => {
+    if (!fhirBundle) return;
+    navigator.clipboard.writeText(JSON.stringify(fhirBundle, null, 2));
+    setHasCopiedFhir(true);
+    setTimeout(() => setHasCopiedFhir(false), 2000);
+  };
+
+  const handleDownloadFhirJson = () => {
+    if (!fhirBundle) return;
+    const dataStr =
+      'data:text/json;charset=utf-8,' +
+      encodeURIComponent(JSON.stringify(fhirBundle, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute(
+      'download',
+      `fhir-bundle-${activeEncounter.id}.json`,
+    );
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
   const formatSeconds = (sec: number) => {
     const m = Math.floor(sec / 60)
       .toString()
@@ -1795,6 +1903,25 @@ export default function DocumentationPage() {
                       <>
                         <Stethoscope size={16} />
                         Suggest Diagnoses
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    onPress={handleGenerateFhirBundle}
+                    isDisabled={isGeneratingFhir}
+                    className="flex items-center gap-1.5 bg-cyan-600/10 hover:bg-cyan-600/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30"
+                  >
+                    {isGeneratingFhir ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin" />
+                        Generating FHIR...
+                      </>
+                    ) : (
+                      <>
+                        <Share2 size={16} />
+                        Generate FHIR R4
                       </>
                     )}
                   </Button>
@@ -3330,6 +3457,377 @@ export default function DocumentationPage() {
                       ))}
                   </div>
                 </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Step 7: FHIR Interoperability Section (R4 Bundle) */}
+          <Card className="p-5 mt-4 flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-gray-200 dark:border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-cyan-100 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300">
+                  <Share2 size={22} />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-semibold">
+                      7. FHIR Interoperability (R4 Bundle)
+                    </h3>
+                    <Badge color="default" variant="soft">
+                      {fhirBundle?.total || 0} Total Resources
+                    </Badge>
+                    {fhirBundle && (
+                      <>
+                        <Badge color="accent" variant="soft">
+                          {
+                            fhirBundle.entry.filter(
+                              (e) => e.resource.resourceType === 'Condition',
+                            ).length
+                          }{' '}
+                          Conditions
+                        </Badge>
+                        <Badge color="success" variant="soft">
+                          {
+                            fhirBundle.entry.filter(
+                              (e) => e.resource.resourceType === 'Observation',
+                            ).length
+                          }{' '}
+                          Observations
+                        </Badge>
+                        <Badge color="warning" variant="soft">
+                          {
+                            fhirBundle.entry.filter(
+                              (e) =>
+                                e.resource.resourceType === 'MedicationRequest',
+                            ).length
+                          }{' '}
+                          MedRequests
+                        </Badge>
+                        <Badge color="danger" variant="soft">
+                          {
+                            fhirBundle.entry.filter(
+                              (e) =>
+                                e.resource.resourceType === 'AllergyIntolerance',
+                            ).length
+                          }{' '}
+                          Allergies
+                        </Badge>
+                      </>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Deterministic, standard-compliant FHIR R4 Bundle serialized from validated encounter clinical entities with standard healthcare coding (LOINC, ICD-10, HL7 v3).
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={handleGenerateFhirBundle}
+                  isDisabled={isGeneratingFhir}
+                  className="flex items-center gap-1.5 text-xs bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100"
+                >
+                  {isGeneratingFhir ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      Synthesizing Bundle...
+                    </>
+                  ) : (
+                    <>
+                      <Share2 size={14} />
+                      Generate FHIR R4 Bundle
+                    </>
+                  )}
+                </Button>
+
+                {fhirBundle && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onPress={handleCopyFhirJson}
+                      className="flex items-center gap-1.5 text-xs"
+                    >
+                      {hasCopiedFhir ? (
+                        <>
+                          <CheckCheck size={14} className="text-emerald-500" />
+                          <span className="text-emerald-600 font-semibold">Copied JSON!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={14} />
+                          Copy JSON
+                        </>
+                      )}
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onPress={handleDownloadFhirJson}
+                      className="flex items-center gap-1.5 text-xs text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+                    >
+                      <Download size={14} />
+                      Download .json
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {!fhirBundle ? (
+              <div className="p-8 rounded-xl border border-dashed border-gray-300 dark:border-zinc-700 flex flex-col items-center justify-center text-center gap-2">
+                <FileCode size={32} className="text-gray-400" />
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                  No FHIR R4 Bundle generated for this encounter yet.
+                </p>
+                <p className="text-xs text-gray-500 max-w-md">
+                  Generate a deterministic, 100% compliant FHIR R4 collection bundle containing Encounter, Condition, Observation, MedicationRequest, AllergyIntolerance, and DocumentReference resources.
+                </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onPress={handleGenerateFhirBundle}
+                    isDisabled={isGeneratingFhir}
+                    className="flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-700 text-white"
+                  >
+                    <Share2 size={14} />
+                    Generate FHIR R4 Bundle
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {/* Category Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-lg bg-gray-100 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 text-xs">
+                  {[
+                    { id: 'all', label: `All Resources (${fhirBundle.total})`, icon: Layers },
+                    {
+                      id: 'Condition',
+                      label: `Conditions (${fhirBundle.entry.filter((e) => e.resource.resourceType === 'Condition').length})`,
+                      icon: Stethoscope,
+                    },
+                    {
+                      id: 'Observation',
+                      label: `Observations (${fhirBundle.entry.filter((e) => e.resource.resourceType === 'Observation').length})`,
+                      icon: Activity,
+                    },
+                    {
+                      id: 'MedicationRequest',
+                      label: `MedRequests (${fhirBundle.entry.filter((e) => e.resource.resourceType === 'MedicationRequest').length})`,
+                      icon: Pill,
+                    },
+                    {
+                      id: 'AllergyIntolerance',
+                      label: `Allergies (${fhirBundle.entry.filter((e) => e.resource.resourceType === 'AllergyIntolerance').length})`,
+                      icon: AlertTriangle,
+                    },
+                    {
+                      id: 'DocumentReference',
+                      label: `DocRef (${fhirBundle.entry.filter((e) => e.resource.resourceType === 'DocumentReference').length})`,
+                      icon: FileText,
+                    },
+                    { id: 'raw', label: 'Raw Bundle JSON', icon: Code },
+                  ].map((tab) => {
+                    const IconComp = tab.icon;
+                    const isActive = fhirTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setFhirTab(tab.id as typeof fhirTab)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-all ${
+                          isActive
+                            ? 'bg-white dark:bg-zinc-900 text-cyan-700 dark:text-cyan-300 shadow-sm'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                        }`}
+                      >
+                        <IconComp size={13} />
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* View: Raw JSON */}
+                {fhirTab === 'raw' ? (
+                  <div className="relative rounded-xl overflow-hidden border border-gray-800 bg-zinc-950 text-zinc-100">
+                    <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800 text-[11px] font-mono text-zinc-400">
+                      <span>FHIR R4 Collection Bundle JSON ({fhirBundle.total} resources)</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCopyFhirJson}
+                          className="hover:text-white flex items-center gap-1"
+                        >
+                          <Copy size={12} />
+                          {hasCopiedFhir ? 'Copied' : 'Copy'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDownloadFhirJson}
+                          className="hover:text-white flex items-center gap-1"
+                        >
+                          <Download size={12} />
+                          Download
+                        </button>
+                      </div>
+                    </div>
+                    <pre className="p-4 text-xs font-mono overflow-auto max-h-[460px] leading-relaxed select-all">
+                      {JSON.stringify(fhirBundle, null, 2)}
+                    </pre>
+                  </div>
+                ) : (
+                  /* View: Resource Cards */
+                  <div className="flex flex-col gap-2.5">
+                    {fhirBundle.entry
+                      .filter((entry) =>
+                        fhirTab === 'all'
+                          ? true
+                          : entry.resource.resourceType === fhirTab,
+                      )
+                      .map((entry, idx) => {
+                        const res = entry.resource;
+                        const rType = res.resourceType as string;
+                        const rId = (res.id as string) || `res-${idx}`;
+
+                        return (
+                          <div
+                            key={rId}
+                            className="p-3.5 rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-cyan-400 dark:hover:border-cyan-600/50 transition-colors flex flex-col gap-2"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-200 border border-cyan-200 dark:border-cyan-800">
+                                  {rType}
+                                </span>
+                                <span className="font-mono text-xs text-gray-500">
+                                  #{rId}
+                                </span>
+                                {Boolean(res.status) && (
+                                  <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 capitalize">
+                                    status: {String(res.status)}
+                                  </span>
+                                )}
+                              </div>
+
+                              <span className="text-[11px] font-mono text-gray-400">
+                                {entry.fullUrl}
+                              </span>
+                            </div>
+
+                            {/* Resource-specific summary presentation */}
+                            <div className="text-xs text-gray-700 dark:text-gray-300 pl-1 flex flex-col gap-1">
+                              {rType === 'Encounter' && (
+                                <div className="flex flex-wrap gap-2 text-xs">
+                                  <span>Subject: {JSON.stringify(res.subject)}</span>
+                                  <span>Class: {((res.class as { display?: string })?.display) || 'AMB'}</span>
+                                  <span>Period: {((res.period as { start?: string })?.start) || ''}</span>
+                                </div>
+                              )}
+
+                              {rType === 'Condition' && (
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                      {((res.code as { text?: string })?.text) || ''}
+                                    </span>
+                                    {(res.code as { coding?: Array<{ code?: string }> })?.coding?.[0]?.code && (
+                                      <span className="px-1.5 py-0.5 rounded text-[11px] font-mono bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                                        ICD-10: {(res.code as { coding: Array<{ code: string }> }).coding[0].code}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {Array.isArray(res.evidence) && res.evidence.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                      <span className="text-[11px] text-gray-400">Evidence:</span>
+                                      {res.evidence.map((ev: { code?: Array<{ text?: string }> }, evIdx: number) => (
+                                        <span
+                                          key={evIdx}
+                                          className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-[11px] text-gray-600 dark:text-gray-400"
+                                        >
+                                          {ev.code?.[0]?.text}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {rType === 'Observation' && (
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-gray-900 dark:text-gray-100">
+                                      {((res.code as { text?: string })?.text) || ''}
+                                    </span>
+                                    {(res.code as { coding?: Array<{ code?: string }> })?.coding?.[0]?.code && (
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                                        LOINC: {(res.code as { coding: Array<{ code: string }> }).coding[0].code}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="font-semibold text-gray-800 dark:text-gray-200">
+                                    {res.valueQuantity
+                                      ? `${(res.valueQuantity as { value: number; unit: string }).value} ${(res.valueQuantity as { unit: string }).unit}`
+                                      : String(res.valueString || '')}
+                                  </div>
+                                </div>
+                              )}
+
+                              {rType === 'MedicationRequest' && (
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                      {((res.medicationCodeableConcept as { text?: string })?.text) || ''}
+                                    </span>
+                                    <span className="text-gray-500">
+                                      • Intent: {String(res.intent)}
+                                    </span>
+                                  </div>
+                                  {Array.isArray(res.dosageInstruction) && res.dosageInstruction[0] && (
+                                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                                      Dosage: {(res.dosageInstruction[0] as { text?: string }).text}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {rType === 'AllergyIntolerance' && (
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                    {((res.code as { text?: string })?.text) || ''}
+                                  </span>
+                                  <span className="text-xs text-red-600 dark:text-red-400">
+                                    (Active & Confirmed)
+                                  </span>
+                                </div>
+                              )}
+
+                              {rType === 'DocumentReference' && (
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                    {((res.type as { text?: string })?.text) || 'Clinical Consultation Document'}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    Attachments:{' '}
+                                    {Array.isArray(res.content)
+                                      ? (res.content as Array<{ attachment?: { title?: string } }>)
+                                          .map((c) => c.attachment?.title)
+                                          .filter(Boolean)
+                                          .join(', ')
+                                      : '0'}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
               </div>
             )}
           </Card>

@@ -14,12 +14,14 @@ import type {
   SoapNote,
   PrescriptionItem,
   ClinicalImpression,
+  FhirBundle,
 } from './documentation.types';
 import { TranscriptionProvider } from './transcription.provider';
 import { ExtractionProvider } from './extraction.provider';
 import { SoapProvider } from './soap.provider';
 import { PrescriptionProvider } from './prescription.provider';
 import { DiagnosisProvider } from './diagnosis.provider';
+import { FhirSerializer } from './fhir.serializer';
 
 @Injectable()
 export class DocumentationService {
@@ -287,6 +289,9 @@ export class DocumentationService {
     ];
 
     for (const enc of initialList) {
+      if (enc.status !== 'draft') {
+        enc.fhirBundle = FhirSerializer.serializeToFhirBundle(enc);
+      }
       this.encounters.set(enc.id, enc);
     }
     this.logger.log(`Initialized DocumentationService with ${initialList.length} encounters`);
@@ -333,6 +338,7 @@ export class DocumentationService {
       soapNote: dto.soapNote,
       prescriptions: dto.prescriptions,
       clinicalImpression: dto.clinicalImpression,
+      fhirBundle: dto.fhirBundle,
       createdAt: now,
       updatedAt: now,
     };
@@ -376,6 +382,8 @@ export class DocumentationService {
         dto.clinicalImpression !== undefined
           ? dto.clinicalImpression
           : encounter.clinicalImpression,
+      fhirBundle:
+        dto.fhirBundle !== undefined ? dto.fhirBundle : encounter.fhirBundle,
       updatedAt: now,
     };
 
@@ -641,5 +649,31 @@ export class DocumentationService {
       `Updated and reviewed clinical impression for encounter ${id} (${clinicalImpression.diagnoses.length} diagnoses)`,
     );
     return encounter;
+  }
+
+  async generateFhirBundle(id: string): Promise<FhirBundle> {
+    const encounter = await this.getEncounterById(id);
+    this.logger.log(`Generating deterministic FHIR R4 bundle for encounter ${id}`);
+
+    const bundle = FhirSerializer.serializeToFhirBundle(encounter);
+    const now = new Date().toISOString();
+
+    encounter.fhirBundle = bundle;
+    encounter.updatedAt = now;
+
+    this.encounters.set(id, encounter);
+    this.logger.log(
+      `Generated FHIR R4 bundle for encounter ${id} with ${bundle.total} resources`,
+    );
+
+    return bundle;
+  }
+
+  async getFhirBundle(id: string): Promise<FhirBundle> {
+    const encounter = await this.getEncounterById(id);
+    if (!encounter.fhirBundle) {
+      return this.generateFhirBundle(id);
+    }
+    return encounter.fhirBundle;
   }
 }

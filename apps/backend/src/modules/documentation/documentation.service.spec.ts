@@ -495,6 +495,52 @@ describe('DocumentationService (Phase 1, 2, 3, 4, 5 & 6)', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('generateFhirBundle (Phase 7)', () => {
+    it('should generate a deterministic FHIR R4 bundle for an existing encounter', async () => {
+      const bundle = await service.generateFhirBundle('enc-101');
+      expect(bundle).toBeDefined();
+      expect(bundle.resourceType).toBe('Bundle');
+      expect(bundle.type).toBe('collection');
+      expect(bundle.total).toBeGreaterThan(0);
+      expect(bundle.entry.length).toBe(bundle.total);
+
+      const encounter = await service.getEncounterById('enc-101');
+      expect(encounter.fhirBundle).toBeDefined();
+      expect(encounter.fhirBundle?.total).toBe(bundle.total);
+    });
+
+    it('should throw NotFoundException when encounter is not found', async () => {
+      await expect(service.generateFhirBundle('unknown-enc-id')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('getFhirBundle (Phase 7)', () => {
+    it('should retrieve existing or auto-generate FHIR bundle for encounter', async () => {
+      const bundle = await service.getFhirBundle('enc-101');
+      expect(bundle).toBeDefined();
+      expect(bundle.resourceType).toBe('Bundle');
+      expect(bundle.total).toBeGreaterThan(0);
+    });
+
+    it('should auto-generate and cache FHIR bundle if not already present', async () => {
+      const encounter = await service.getEncounterById('enc-103');
+      encounter.fhirBundle = undefined;
+
+      const bundle = await service.getFhirBundle('enc-103');
+      expect(bundle).toBeDefined();
+      expect(bundle.resourceType).toBe('Bundle');
+      expect(encounter.fhirBundle).toBeDefined();
+    });
+
+    it('should throw NotFoundException for unknown encounter', async () => {
+      await expect(service.getFhirBundle('unknown-enc-id')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
 });
 
 
