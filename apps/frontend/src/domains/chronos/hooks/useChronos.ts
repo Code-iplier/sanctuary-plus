@@ -6,14 +6,30 @@
  * Preserves Chronos websocket_connections["__triage__"] fan-out.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { ChronosPatient, ChronosRiskPoint } from '../model/chronos.types';
-import { getChronosSummary } from '../api/chronos.client';
+import type {
+  ChronosPatient,
+  ChronosRiskPoint,
+  ChronosStreamStatus,
+} from '../model/chronos.types';
+import {
+  controlChronosStream,
+  getChronosStreamStatus,
+  getChronosSummary,
+} from '../api/chronos.client';
 
 const MAX_HISTORY = 24;
 
 export type ChronosHistoryPoint = ChronosRiskPoint;
 export type ChronosConnectionState =
-  'INITIALIZING' | 'CONNECTING' | 'WAITING' | 'LIVE' | 'STALE' | 'OFFLINE';
+  | 'INITIALIZING'
+  | 'CONNECTING'
+  | 'WAITING'
+  | 'LIVE'
+  | 'STALE'
+  | 'OFFLINE'
+  | 'PAUSED'
+  | 'RESTARTING'
+  | 'COMPLETE';
 
 export type UseChronosReturn = {
   patients: Record<string, ChronosPatient>;
@@ -25,6 +41,8 @@ export type UseChronosReturn = {
   hasCheckedHealth: boolean;
   connectionState: ChronosConnectionState;
   lastEventAt: string | null;
+  streamStatus: ChronosStreamStatus | null;
+  controlStream: (action: 'play' | 'pause' | 'restart') => Promise<void>;
   modelsLoaded: string[];
   predictionHistory: ChronosHistoryPoint[];
 };
@@ -36,6 +54,9 @@ export function useChronos(): UseChronosReturn {
   const [apiOnline, setApiOnline] = useState(false);
   const [hasCheckedHealth, setHasCheckedHealth] = useState(false);
   const [lastEventAt, setLastEventAt] = useState<string | null>(null);
+  const [streamStatus, setStreamStatus] = useState<ChronosStreamStatus | null>(
+    null,
+  );
   const [modelsLoaded, setModelsLoaded] = useState<string[]>([]);
   const [predictionHistory, setPredictionHistory] = useState<
     ChronosHistoryPoint[]
@@ -49,6 +70,32 @@ export function useChronos(): UseChronosReturn {
   const selectPatient = useCallback((id: string) => {
     setSelected((prev) => (prev === id ? null : id));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const status = await getChronosStreamStatus();
+        if (!cancelled) setStreamStatus(status);
+      } catch {
+        if (!cancelled) setStreamStatus(null);
+      }
+    };
+    check();
+    const interval = setInterval(check, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const controlStream = useCallback(
+    async (action: 'play' | 'pause' | 'restart') => {
+      const status = await controlChronosStream(action);
+      setStreamStatus(status);
+    },
+    [],
+  );
 
   // Health polling — distinguishes online vs offline (not fake empty patients)
   useEffect(() => {
@@ -170,11 +217,17 @@ export function useChronos(): UseChronosReturn {
       ? Object.keys(patients).length
         ? 'STALE'
         : 'OFFLINE'
-      : !connected
-        ? 'CONNECTING'
-        : Object.keys(patients).length
-          ? 'LIVE'
-          : 'WAITING';
+      : streamStatus?.status === 'PAUSED'
+        ? 'PAUSED'
+        : streamStatus?.status === 'RESTARTING'
+          ? 'RESTARTING'
+          : streamStatus?.status === 'COMPLETE'
+            ? 'COMPLETE'
+            : !connected
+              ? 'CONNECTING'
+              : Object.keys(patients).length
+                ? 'LIVE'
+                : 'WAITING';
 
   return {
     patients,
@@ -186,6 +239,8 @@ export function useChronos(): UseChronosReturn {
     hasCheckedHealth,
     connectionState,
     lastEventAt,
+    streamStatus,
+    controlStream,
     modelsLoaded,
     predictionHistory,
   };

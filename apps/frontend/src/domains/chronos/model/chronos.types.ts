@@ -110,3 +110,10 @@ export type ChronosSummary = {
   refreshedAt?: string;
   timestamp?: string;
 };
+
+export type ChronosStreamStatus = {
+  status: 'WAITING' | 'LIVE' | 'PAUSED' | 'RESTARTING' | 'COMPLETE';
+  revision: number;
+  cohort_size: number;
+  last_event_at: string | null;
+};

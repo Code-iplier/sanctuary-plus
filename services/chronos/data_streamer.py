@@ -439,13 +439,12 @@ def compute_ground_truth(patient: dict) -> dict:
 # ─────────────────────────────────────────────
 
 def get_next_vitals(patient: dict) -> Optional[dict]:
-    """Returns the next row of vitals for a patient, cycling back to start."""
+    """Returns the next real replay row; None marks a naturally completed patient."""
     idx = patient["current_row"]
     timeline = patient["timeline"]
     
     if idx >= len(timeline):
-        patient["current_row"] = 0  # Loop back (ICU shift simulation)
-        idx = 0
+        return None
     
     row = timeline.iloc[idx]
     patient["current_row"] += 1
@@ -468,11 +467,22 @@ def get_next_vitals(patient: dict) -> Optional[dict]:
 async def stream_patient_to_api(
     patient: dict,
     client: httpx.AsyncClient,
-    interval_seconds: float
+    interval_seconds: float,
+    control: dict,
 ):
     """Continuously streams one patient's vitals to the API."""
+    generation = control["generation"]
     while True:
+        if control["paused"]:
+            await asyncio.sleep(0.25)
+            continue
         vitals = get_next_vitals(patient)
+        if vitals is None:
+            control["finished"].add(patient["patient_id"])
+            while generation == control["generation"]:
+                await asyncio.sleep(0.25)
+            generation = control["generation"]
+            continue
         if vitals:
             try:
                 resp = await client.post(
@@ -500,6 +510,34 @@ async def stream_patient_to_api(
         await asyncio.sleep(interval_seconds)
 
 
+async def watch_stream_control(client: httpx.AsyncClient, patients: list[dict], control: dict):
+    """One lightweight watcher controls all patient tasks without duplicate polling."""
+    revision = 0
+    while True:
+        try:
+            state = (await client.get(f"{API_BASE}/stream/status", timeout=5.0)).json()
+            status = state.get("status", "LIVE")
+            control["paused"] = status == "PAUSED"
+            next_revision = int(state.get("revision", 0))
+            if next_revision != revision:
+                revision = next_revision
+                for patient in patients:
+                    patient["current_row"] = 0
+                control["finished"].clear()
+                control["completion_reported"] = False
+                control["generation"] += 1
+                await client.post(f"{API_BASE}/stream/register", json={"cohort_size": len(patients)})
+            elif (
+                len(control["finished"]) == len(patients)
+                and not control["completion_reported"]
+            ):
+                control["completion_reported"] = True
+                await client.post(f"{API_BASE}/stream/complete")
+        except Exception as e:
+            logger.warning(f"Stream control unavailable: {e}")
+        await asyncio.sleep(1.0)
+
+
 async def run_streamer(patients: list[dict], interval: float):
     """Runs all patient streams concurrently."""
     logger.info(f"\n🏥 PROJECT CHRONOS STREAMER ONLINE")
@@ -515,9 +553,12 @@ async def run_streamer(patients: list[dict], interval: float):
             logger.info("   Run: uvicorn backend.api:app --host 0.0.0.0 --port 8000")
             return
         
+        await client.post(f"{API_BASE}/stream/register", json={"cohort_size": len(patients)})
+        control = {"paused": False, "finished": set(), "completion_reported": False, "generation": 0}
+        watcher = asyncio.create_task(watch_stream_control(client, patients, control))
         # Launch all concurrent patient streams
         tasks = [
-            asyncio.create_task(stream_patient_to_api(p, client, interval))
+            asyncio.create_task(stream_patient_to_api(p, client, interval, control))
             for p in patients
         ]
         
@@ -536,7 +577,7 @@ def main():
     parser = argparse.ArgumentParser(description="Project Chronos - Patient Streamer")
     parser.add_argument("--speed",    type=float, default=5.0,
                         help="Seconds between vital updates (default: 5)")
-    parser.add_argument("--patients", type=int, default=100,
+    parser.add_argument("--patients", type=int, default=int(os.getenv("CHRONOS_MAX_PATIENTS", "100")),
                         help="Max concurrent patients (default: 100)")
     parser.add_argument("--api",      type=str, default="http://localhost:8000",
                         help="Backend API URL (default: http://localhost:8000)")

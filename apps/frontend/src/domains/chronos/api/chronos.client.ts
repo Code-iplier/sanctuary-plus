@@ -4,7 +4,11 @@
  * REST goes Browser → Vite /api/chronos → Nest 3000 → FastAPI 8000.
  * WebSocket goes Browser → Vite /ws → FastAPI 8000 (not Nest).
  */
-import type { ChronosPatient, ChronosSummary } from '../model/chronos.types';
+import type {
+  ChronosPatient,
+  ChronosStreamStatus,
+  ChronosSummary,
+} from '../model/chronos.types';
 
 const CHRONOS_PREFIX = '/api/chronos';
 
@@ -21,13 +25,29 @@ export async function getChronosSummary(): Promise<ChronosSummary> {
   return request<ChronosSummary>('/summary');
 }
 
-export async function predictChronos(payload: Record<string, unknown>): Promise<ChronosPatient> {
+export async function predictChronos(
+  payload: Record<string, unknown>,
+): Promise<ChronosPatient> {
   return request<ChronosPatient>('/predict', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export async function getPatientHistory(patientId: string): Promise<{ patient_id: string; n_rows: number; history: unknown[] }> {
-  return request<{ patient_id: string; n_rows: number; history: unknown[] }>(`/patient/${encodeURIComponent(patientId)}/history`);
+export async function getPatientHistory(
+  patientId: string,
+): Promise<{ patient_id: string; n_rows: number; history: unknown[] }> {
+  return request<{ patient_id: string; n_rows: number; history: unknown[] }>(
+    `/patient/${encodeURIComponent(patientId)}/history`,
+  );
+}
+
+export function getChronosStreamStatus(): Promise<ChronosStreamStatus> {
+  return request('/stream/status');
+}
+
+export function controlChronosStream(
+  action: 'play' | 'pause' | 'restart',
+): Promise<ChronosStreamStatus> {
+  return request(`/stream/${action}`, { method: 'POST' });
 }

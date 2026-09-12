@@ -44,6 +44,15 @@ export function PatientCard({
     <Card
       className={`p-3 cursor-pointer transition-all ${isSelected ? 'ring-2 ring-cyan-600' : 'hover:shadow-md'} card-hover`}
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open clinical workspace for patient ${patient_id}`}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      }}
     >
       <div className="flex items-center justify-between">
         <span className="font-mono text-xs font-semibold tracking-wide text-slate-700">
@@ -54,8 +63,11 @@ export function PatientCard({
         </Badge>
       </div>
 
-      <div className="flex items-center gap-2 mt-2">
-        <div className="flex gap-1.5 flex-1">
+      <div className="mt-2">
+        <p className="text-[9px] font-bold tracking-widest text-slate-500 mb-1">
+          CLINICAL SCORES
+        </p>
+        <div className="grid grid-cols-3 gap-1.5">
           {CLINICAL_CHIPS.map((chip) => {
             const val = (clinical_scores as Record<string, number>)[chip.key];
             return (
@@ -75,29 +87,27 @@ export function PatientCard({
             );
           })}
         </div>
-        {_crashHistory.length >= 2 && (
-          <Sparkline data={_crashHistory} width={72} height={18} />
-        )}
       </div>
 
-      <div className="flex gap-1.5 mt-2.5 flex-wrap items-center">
-        <Badge color="accent" variant="soft" className="text-[10px]">
-          SEP {sepsis.toFixed(0)}%
-        </Badge>
-        <Badge
-          color={bp > 30 ? 'warning' : 'success'}
-          variant="soft"
-          className="text-[10px]"
-        >
-          HYP {bp.toFixed(0)}%
-        </Badge>
-        <Badge
-          color={ca > 30 ? 'danger' : 'success'}
-          variant="soft"
-          className="text-[10px]"
-        >
-          CA {ca.toFixed(0)}%
-        </Badge>
+      <div className="grid grid-cols-[1fr_auto] gap-2 mt-2.5 items-end">
+        <div className="grid grid-cols-3 gap-1 text-[10px] text-slate-600">
+          <span>
+            Septic shock{' '}
+            <b className="block text-slate-800">{sepsis.toFixed(0)}%</b>
+          </span>
+          <span>
+            Hypotension <b className="block text-slate-800">{bp.toFixed(0)}%</b>
+          </span>
+          <span>
+            Cardiac arrest{' '}
+            <b className="block text-slate-800">{ca.toFixed(0)}%</b>
+          </span>
+        </div>
+        {_crashHistory.length >= 2 && (
+          <Sparkline data={_crashHistory} width={82} height={26} />
+        )}
+      </div>
+      <div className="flex gap-1.5 mt-2 flex-wrap items-center">
         {last_updated && (
           <span className="ml-auto text-[10px] font-mono text-slate-400">
             {new Date(last_updated).toLocaleTimeString()}

@@ -286,6 +286,16 @@ patient_history: dict[str, deque] = defaultdict(lambda: deque(maxlen=MAX_HISTORY
 # Now each key holds a LIST of sockets; push_to_websocket iterates all of them.
 websocket_connections: dict[str, list[WebSocket]] = defaultdict(list)
 
+# Replay control is deliberately separate from inference. The independent MIMIC
+# streamer polls this small state contract; browser clients reach it only via
+# Sanctuary's Nest gateway.
+stream_control = {
+    "status": "WAITING",
+    "revision": 0,
+    "cohort_size": 0,
+    "last_event_at": None,
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Lifespan (model loading at startup)
@@ -703,6 +713,45 @@ async def health_check():
     }
 
 
+@app.get("/stream/status")
+async def get_stream_status():
+    return stream_control
+
+
+@app.post("/stream/register")
+async def register_stream(payload: dict):
+    stream_control["cohort_size"] = int(payload.get("cohort_size", 0))
+    stream_control["status"] = "LIVE"
+    return stream_control
+
+
+@app.post("/stream/play")
+async def play_stream():
+    if stream_control["status"] in {"PAUSED", "COMPLETE", "WAITING"}:
+        stream_control["status"] = "LIVE"
+    return stream_control
+
+
+@app.post("/stream/pause")
+async def pause_stream():
+    if stream_control["status"] == "LIVE":
+        stream_control["status"] = "PAUSED"
+    return stream_control
+
+
+@app.post("/stream/restart")
+async def restart_stream():
+    stream_control["status"] = "RESTARTING"
+    stream_control["revision"] += 1
+    return stream_control
+
+
+@app.post("/stream/complete")
+async def complete_stream():
+    stream_control["status"] = "COMPLETE"
+    return stream_control
+
+
 @app.get("/patients")
 async def list_patients():
     """Returns the current status of all tracked patients (for the Triage Radar)."""
@@ -720,6 +769,7 @@ async def predict(payload: VitalsPayload, background_tasks: BackgroundTasks):
     """
     pid = payload.patient_id
     ts  = payload.timestamp or datetime.now(timezone.utc).isoformat()
+    stream_control["last_event_at"] = ts
     
     # ── 1. Update rolling patient history ─────────────────────────────────
     vitals_dict = payload.model_dump()
