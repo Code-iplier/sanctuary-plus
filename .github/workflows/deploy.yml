@@ -104,7 +104,7 @@ jobs:
         run: npx tsc -p apps/backend/tsconfig.build.json
 
       - name: Build frontend
-        run: npx vite build --config apps/frontend/vite.config.ts
+        run: npx vite build --config apps/frontend/vite.config.ts --root apps/frontend
         env:
           NODE_ENV: production
           VITE_BASE_PATH: '/${{ github.event.repository.name }}/'
