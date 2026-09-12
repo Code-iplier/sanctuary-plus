@@ -53,7 +53,7 @@ export interface DoctorProfile {
 export interface PatientTicket {
   id: string;
   tokenNumber: string; // e.g. "GEN-104", "CARD-201"
-  patientId: string;   // Shared ID format e.g. "PAT-000104"
+  patientId: string; // Shared ID format e.g. "PAT-000104"
   patientName: string;
   patientPhone: string;
   departmentId: string;
@@ -101,7 +101,7 @@ export type QueueStatus = TicketStatus;
 
 export interface QueuePolicy {
   approachingThreshold: number; // default: 2
-  returnWindowMinutes: number;  // default: 5
+  returnWindowMinutes: number; // default: 5
   priorityWeights: Record<TriageLevel, number>;
 }
 
@@ -148,6 +148,7 @@ export type Session =
       patientId: string;
       phone?: string;
       name?: string;
+      accessToken?: string;
     }
   | {
       role: 'staff';
@@ -159,10 +160,13 @@ export type Session =
       doctorProfileId?: string;
       roomId?: string;
       departmentId?: string;
+      accessToken?: string;
     }
   | null;
 
 // Helper to determine derived APPROACHING state without mutating authoritative DB status
 export function isApproaching(ticket: PatientTicket, threshold = 2): boolean {
-  return ticket.status === 'WAITING' && (ticket.patientsAhead ?? 999) <= threshold;
+  return (
+    ticket.status === 'WAITING' && (ticket.patientsAhead ?? 999) <= threshold
+  );
 }

@@ -110,6 +110,123 @@ cd apps/backend && npm run start:dev
 cd chronos && uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+## Authentication and access flow
+
+The repository now issues JWT access tokens through the NestJS backend while
+preserving the existing frontend demo login portal. The frontend keeps the
+current hardcoded demo roster and patient registration experience, then
+exchanges the selected identity for a backend token. Medication requests send
+that token as an `Authorization: Bearer <token>` header.
+
+### Demo accounts
+
+| Role | Username | Password |
+|------|----------|----------|
+| Staff | `staff@hospital.demo` | `staff123` |
+| Admin/demo staff | `admin@hospital.demo` | `admin123` |
+
+Patient access continues to use the existing patient phone/registration flow.
+The current prototype signs a patient token for the selected local patient
+record; production identity verification and persisted user accounts are a
+later authentication phase.
+
+### Authentication endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/api/auth/staff/login` | Issue a staff JWT from demo credentials |
+| `POST` | `/api/auth/patient/login` | Issue a patient JWT for the selected patient session |
+
+Medication routes require a valid bearer token and enforce patient ownership
+or staff access in the backend. The JWT guard returns `401 Unauthorized` for
+missing/invalid tokens. Medication role checks return `403 Forbidden` when a
+patient attempts a staff-only action.
+
+Set a strong secret in `.env` before running outside local development:
+
+```dotenv
+JWT_SECRET=replace-this-with-a-long-random-secret
+DATABASE_URL=postgresql://sanctuary:sanctuary_dev@localhost:5433/sanctuary
+CHRONOS_BASE_URL=http://127.0.0.1:8000
+PORT=3000
+NODE_ENV=development
+```
+
+The fallback JWT secret is intended only for local demonstration.
+
+## Medication reconciliation workflows
+
+Medication reconciliation has separate patient and hospital-staff workflows.
+
+### Patient workflow
+
+Patients can:
+
+- View their own home and hospital medication information.
+- Add home medications, including information remembered from memory.
+- Report allergies or reactions for staff review.
+- See medication status and verification state.
+
+Patients cannot:
+
+- Add hospital medication orders.
+- Compare or resolve prescriptions.
+- Verify, reject, reconcile, hold, modify, replace, or discontinue medication records.
+- View staff-only interactions, audit events, or internal clinical decisions.
+
+Patient-created home medications use `source=HOME` and start with
+`verificationStatus=UNVERIFIED`. They never become an approved hospital order
+automatically.
+
+### Staff workflow
+
+Hospital staff can:
+
+- View the medication lists for a patient.
+- Add hospital medication orders.
+- Compare home prescriptions with hospital orders.
+- Review allergy and interaction alerts.
+- Verify or reject patient-submitted medications with a reason.
+- Continue, modify, hold, replace, review, or discontinue medications.
+- View reconciliation history and audit events.
+
+Medication verification states are:
+
+- `UNVERIFIED` — submitted by a patient or awaiting review.
+- `VERIFIED` — reviewed and accepted by staff.
+- `REJECTED` — reviewed and rejected by staff.
+
+Every verification and reconciliation decision records the acting user, reason,
+before/after values where applicable, and timestamp in the audit trail.
+
+### Medication API surface
+
+| Method | Endpoint | Access |
+|--------|----------|--------|
+| `GET` | `/api/patients/:patientId/medications` | Patient owner or staff |
+| `POST` | `/api/patients/:patientId/medications` | Patient owner for home meds; staff for hospital orders |
+| `GET` | `/api/patients/:patientId/allergies` | Patient owner or staff |
+| `POST` | `/api/patients/:patientId/allergies` | Patient owner or staff |
+| `GET` | `/api/patients/:patientId/medication-comparison` | Staff workflow |
+| `GET` | `/api/patients/:patientId/medication-safety` | Staff workflow |
+| `GET` | `/api/patients/:patientId/medication-history` | Patient-safe history or staff |
+| `GET` | `/api/patients/:patientId/medication-audit` | Staff only |
+| `PATCH` | `/api/medications/:medicationId/verification` | Staff only |
+| `POST` | `/api/medications/:medicationId/reconcile` | Staff only |
+
+### Database setup
+
+Start PostgreSQL and apply the Prisma migrations before starting the backend:
+
+```bash
+docker compose up -d postgres
+npx prisma generate
+npx prisma migrate deploy
+```
+
+The medication verification migration adds the `MedicationVerificationStatus`
+field to medication records. The backend requires `DATABASE_URL` at startup.
+
 ## Available Scripts
 
 ### Frontend (`apps/frontend/`)
