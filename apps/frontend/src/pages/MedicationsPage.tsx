@@ -305,7 +305,7 @@ export default function MedicationsPage({ session }: MedicationsPageProps) {
   return (
     <div className="flex flex-col gap-4">
       <Card className="p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold">Medication Reconciliation</h2>
             <p className="text-sm text-gray-500">
@@ -483,7 +483,10 @@ export default function MedicationsPage({ session }: MedicationsPageProps) {
       </div>
 
       <Tabs defaultSelectedKey={isStaff ? 'comparison' : 'medications'}>
-        <Tabs.List aria-label="Medication sections">
+        <Tabs.List
+          aria-label="Medication sections"
+          className="flex flex-wrap gap-1"
+        >
           {isStaff && (
             <Tabs.Tab id="comparison">Compare prescriptions</Tabs.Tab>
           )}
@@ -768,7 +771,7 @@ export default function MedicationsPage({ session }: MedicationsPageProps) {
                   }
                   fullWidth
                 />
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     variant="primary"
                     isDisabled={saving || !verificationReason.trim()}

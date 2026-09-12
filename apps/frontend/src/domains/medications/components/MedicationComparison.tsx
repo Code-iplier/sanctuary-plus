@@ -127,7 +127,7 @@ export function MedicationComparison({
               hospital.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Badge color="danger" variant="soft">
               {differenceCount} to review
             </Badge>
@@ -139,70 +139,74 @@ export function MedicationComparison({
       </Card>
 
       <Card className="overflow-hidden border border-slate-200 shadow-sm">
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_116px] border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-          <div className="p-3 md:p-4">Home prescription</div>
-          <div className="border-l border-slate-200 p-3 md:p-4">
-            Hospital order
-          </div>
-          <div className="border-l border-slate-200 p-3 text-center md:p-4">
-            Review
+        <div className="overflow-x-auto">
+          <div className="min-w-[760px]">
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_116px] border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+              <div className="p-3 md:p-4">Home prescription</div>
+              <div className="border-l border-slate-200 p-3 md:p-4">
+                Hospital order
+              </div>
+              <div className="border-l border-slate-200 p-3 text-center md:p-4">
+                Review
+              </div>
+            </div>
+
+            {rows.length === 0 ? (
+              <div className="p-8 text-center text-sm text-slate-500">
+                No medications are available for comparison yet.
+              </div>
+            ) : (
+              rows.map((row) => {
+                const hasDifference = Boolean(row.discrepancy);
+                const reconcileMedication = row.hospital ?? row.home;
+                return (
+                  <div
+                    key={row.key}
+                    className={`grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_116px] border-b border-slate-100 last:border-b-0 ${hasDifference ? 'bg-amber-50/50' : 'bg-white'}`}
+                  >
+                    <div className="min-w-0 p-3 md:p-4">
+                      <PrescriptionCell
+                        medication={row.home}
+                        muted={hasDifference && !row.home}
+                      />
+                    </div>
+                    <div className="min-w-0 border-l border-slate-100 p-3 md:p-4">
+                      <PrescriptionCell
+                        medication={row.hospital}
+                        muted={hasDifference && !row.hospital}
+                      />
+                    </div>
+                    <div className="flex flex-col items-center justify-center gap-2 border-l border-slate-100 p-2 text-center">
+                      {hasDifference ? (
+                        <>
+                          <Badge color="warning" variant="soft">
+                            <span className="inline-flex items-center gap-1">
+                              <TriangleAlert size={12} />
+                              {DISCREPANCY_LABEL[row.discrepancy!.type]}
+                            </span>
+                          </Badge>
+                          {reconcileMedication && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onPress={() => onReconcile(reconcileMedication)}
+                            >
+                              Review <ArrowRight size={13} />
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                          <Check size={14} /> Aligned
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
-
-        {rows.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-500">
-            No medications are available for comparison yet.
-          </div>
-        ) : (
-          rows.map((row) => {
-            const hasDifference = Boolean(row.discrepancy);
-            const reconcileMedication = row.hospital ?? row.home;
-            return (
-              <div
-                key={row.key}
-                className={`grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_116px] border-b border-slate-100 last:border-b-0 ${hasDifference ? 'bg-amber-50/50' : 'bg-white'}`}
-              >
-                <div className="min-w-0 p-3 md:p-4">
-                  <PrescriptionCell
-                    medication={row.home}
-                    muted={hasDifference && !row.home}
-                  />
-                </div>
-                <div className="min-w-0 border-l border-slate-100 p-3 md:p-4">
-                  <PrescriptionCell
-                    medication={row.hospital}
-                    muted={hasDifference && !row.hospital}
-                  />
-                </div>
-                <div className="flex flex-col items-center justify-center gap-2 border-l border-slate-100 p-2 text-center">
-                  {hasDifference ? (
-                    <>
-                      <Badge color="warning" variant="soft">
-                        <span className="inline-flex items-center gap-1">
-                          <TriangleAlert size={12} />
-                          {DISCREPANCY_LABEL[row.discrepancy!.type]}
-                        </span>
-                      </Badge>
-                      {reconcileMedication && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onPress={() => onReconcile(reconcileMedication)}
-                        >
-                          Review <ArrowRight size={13} />
-                        </Button>
-                      )}
-                    </>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
-                      <Check size={14} /> Aligned
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
       </Card>
     </div>
   );
