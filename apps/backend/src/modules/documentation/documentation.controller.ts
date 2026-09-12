@@ -28,6 +28,8 @@ import type {
   ClinicalImpression,
   UpdateClinicalImpressionDto,
   FhirBundle,
+  FinalizeEncounterDto,
+  PatientJourneyIntegrationSummary,
 } from './documentation.types';
 
 
@@ -180,5 +182,21 @@ export class DocumentationController {
     @Param('id') id: string,
   ): Promise<FhirBundle> {
     return this.documentationService.getFhirBundle(id);
+  }
+
+  @Post(':id/finalize')
+  @HttpCode(HttpStatus.OK)
+  async finalizeEncounter(
+    @Param('id') id: string,
+    @Body() dto?: FinalizeEncounterDto,
+  ): Promise<ClinicalEncounter> {
+    return this.documentationService.finalizeEncounter(id, dto?.clinicianId);
+  }
+
+  @Get(':id/integration-summary')
+  async getIntegrationPayload(
+    @Param('id') id: string,
+  ): Promise<PatientJourneyIntegrationSummary> {
+    return this.documentationService.getIntegrationPayload(id);
   }
 }

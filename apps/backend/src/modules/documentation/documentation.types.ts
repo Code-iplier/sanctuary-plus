@@ -24,6 +24,8 @@ export type {
   UpdateClinicalImpressionDto,
   FhirBundleEntry,
   FhirBundle,
+  FinalizeEncounterDto,
+  PatientJourneyIntegrationSummary,
 } from '@org/models';
 
 

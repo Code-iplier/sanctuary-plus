@@ -15,6 +15,7 @@ import type {
   PrescriptionItem,
   ClinicalImpression,
   FhirBundle,
+  PatientJourneyIntegrationSummary,
 } from './documentation.types';
 import { TranscriptionProvider } from './transcription.provider';
 import { ExtractionProvider } from './extraction.provider';
@@ -48,7 +49,9 @@ export class DocumentationService {
         clinicianId: 'doc-smith',
         dateTime: new Date(Date.now() - 7200000).toISOString(),
         type: 'inpatient',
-        status: 'reviewed',
+        status: 'finalized',
+        finalizedAt: new Date(Date.now() - 3200000).toISOString(),
+        finalizedBy: 'doc-smith',
         rawTranscript: `[Doctor]: Good morning, Mr. Doe. Can you tell me what brought you in today?
 [Patient]: I was walking up the stairs and suddenly had this intense crushing chest pressure going into my left arm.
 [Doctor]: Did you have any shortness of breath or cold sweats?
@@ -339,6 +342,8 @@ export class DocumentationService {
       prescriptions: dto.prescriptions,
       clinicalImpression: dto.clinicalImpression,
       fhirBundle: dto.fhirBundle,
+      finalizedAt: dto.finalizedAt,
+      finalizedBy: dto.finalizedBy,
       createdAt: now,
       updatedAt: now,
     };
@@ -384,6 +389,10 @@ export class DocumentationService {
           : encounter.clinicalImpression,
       fhirBundle:
         dto.fhirBundle !== undefined ? dto.fhirBundle : encounter.fhirBundle,
+      finalizedAt:
+        dto.finalizedAt !== undefined ? dto.finalizedAt : encounter.finalizedAt,
+      finalizedBy:
+        dto.finalizedBy !== undefined ? dto.finalizedBy : encounter.finalizedBy,
       updatedAt: now,
     };
 
@@ -675,5 +684,107 @@ export class DocumentationService {
       return this.generateFhirBundle(id);
     }
     return encounter.fhirBundle;
+  }
+
+  async finalizeEncounter(
+    id: string,
+    clinicianId?: string,
+  ): Promise<ClinicalEncounter> {
+    const encounter = await this.getEncounterById(id);
+
+    // Enforce clinical minimum documentation requirements before finalization
+    const hasTranscript =
+      encounter.rawTranscript && encounter.rawTranscript.trim().length > 10;
+    const hasSoap = Boolean(encounter.soapNote);
+    const hasExtraction = Boolean(encounter.extraction);
+    const hasImpression = Boolean(encounter.clinicalImpression);
+
+    if (!hasTranscript && !hasSoap && !hasExtraction && !hasImpression) {
+      throw new BadRequestException(
+        'Encounter cannot be finalized in an empty draft state. Complete transcript, clinical notes, extraction, or diagnoses first.',
+      );
+    }
+
+    // Ensure deterministic FHIR R4 Bundle is generated & attached
+    if (!encounter.fhirBundle) {
+      encounter.fhirBundle = FhirSerializer.serializeToFhirBundle(encounter);
+    }
+
+    const now = new Date().toISOString();
+    encounter.status = 'finalized';
+    encounter.finalizedAt = now;
+    encounter.finalizedBy = clinicianId || encounter.clinicianId || 'doc-smith';
+    encounter.updatedAt = now;
+
+    this.encounters.set(id, encounter);
+    this.logger.log(
+      `Encounter ${id} successfully finalized and locked by ${encounter.finalizedBy}`,
+    );
+
+    return encounter;
+  }
+
+  async getIntegrationPayload(
+    id: string,
+  ): Promise<PatientJourneyIntegrationSummary> {
+    const encounter = await this.getEncounterById(id);
+
+    // Enforce clinical safety rule: only finalized encounters flow downstream
+    if (encounter.status !== 'finalized') {
+      throw new BadRequestException(
+        `Downstream patient journey integration is restricted to finalized encounters. Encounter "${id}" is currently in "${encounter.status}" status.`,
+      );
+    }
+
+    const approvedMeds = (encounter.prescriptions || [])
+      .filter((rx) => rx.status === 'approved')
+      .map((rx) => ({
+        medication: rx.medication,
+        dosage: rx.dosage,
+        route: rx.route,
+        frequency: rx.frequency,
+        instructions: rx.instructions || '',
+      }));
+
+    const vitalsMap: Record<string, string> = {};
+    (encounter.extraction?.vitals || []).forEach((v) => {
+      vitalsMap[v.name] = v.unit ? `${v.value} ${v.unit}` : v.value;
+    });
+
+    const activeDiagnoses = (encounter.clinicalImpression?.diagnoses || [])
+      .filter((d) => d.status === 'confirmed' || d.type === 'primary')
+      .map((d) => (d.code ? `${d.name} (${d.code})` : d.name));
+
+    const summaryText =
+      encounter.soapNote?.assessment ||
+      encounter.clinicalImpression?.summary ||
+      encounter.rawTranscript?.substring(0, 160) ||
+      'Clinical consultation documented and finalized.';
+
+    const payload: PatientJourneyIntegrationSummary = {
+      encounterId: encounter.id,
+      patientId: encounter.patientId,
+      finalizedAt: encounter.finalizedAt || encounter.updatedAt,
+      finalizedBy: encounter.finalizedBy || encounter.clinicianId || 'doc-smith',
+      timelineEvent: {
+        type: 'clinical-encounter',
+        title: `${encounter.type.toUpperCase()} Consultation Note`,
+        summary: summaryText,
+        timestamp: encounter.finalizedAt || encounter.dateTime,
+      },
+      medReconciliationItems: approvedMeds,
+      riskAssessmentInput: {
+        diagnoses: activeDiagnoses,
+        vitals: vitalsMap,
+      },
+      fhirBundleSummary: {
+        totalResources: encounter.fhirBundle?.total || 0,
+        bundleId:
+          (encounter.fhirBundle?.entry?.[0]?.resource?.['id'] as string) ||
+          undefined,
+      },
+    };
+
+    return payload;
   }
 }

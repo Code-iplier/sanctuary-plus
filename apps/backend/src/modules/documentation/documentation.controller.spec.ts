@@ -16,6 +16,8 @@ import type {
   ClinicalImpression,
   UpdateClinicalImpressionDto,
   FhirBundle,
+  FinalizeEncounterDto,
+  PatientJourneyIntegrationSummary,
 } from './documentation.types';
 
 describe('DocumentationController', () => {
@@ -61,6 +63,35 @@ describe('DocumentationController', () => {
         resource: { resourceType: 'Encounter', id: 'enc-101' },
       },
     ],
+  };
+
+  const mockIntegrationSummary: PatientJourneyIntegrationSummary = {
+    encounterId: 'enc-101',
+    patientId: '1',
+    finalizedAt: '2026-09-13T00:00:00.000Z',
+    finalizedBy: 'doc-smith',
+    timelineEvent: {
+      type: 'clinical-encounter',
+      title: 'OUTPATIENT Consultation Note',
+      summary: 'Patient reports cough and fever.',
+      timestamp: '2026-09-13T00:00:00.000Z',
+    },
+    medReconciliationItems: [
+      {
+        medication: 'Amoxicillin',
+        dosage: '500 mg',
+        route: 'oral',
+        frequency: 'TID',
+        instructions: 'Take with food',
+      },
+    ],
+    riskAssessmentInput: {
+      diagnoses: ['Acute Bronchitis (J20.9)'],
+      vitals: { BP: '120/80 mmHg' },
+    },
+    fhirBundleSummary: {
+      totalResources: 1,
+    },
   };
 
   const mockEncounter: ClinicalEncounter = {
@@ -136,6 +167,13 @@ describe('DocumentationController', () => {
       }),
       generateFhirBundle: vi.fn().mockResolvedValue(mockFhirBundle),
       getFhirBundle: vi.fn().mockResolvedValue(mockFhirBundle),
+      finalizeEncounter: vi.fn().mockResolvedValue({
+        ...mockEncounter,
+        status: 'finalized',
+        finalizedAt: '2026-09-13T00:00:00.000Z',
+        finalizedBy: 'doc-smith',
+      }),
+      getIntegrationPayload: vi.fn().mockResolvedValue(mockIntegrationSummary),
     } as unknown as DocumentationService;
 
     controller = new DocumentationController(service);
@@ -248,6 +286,20 @@ describe('DocumentationController', () => {
     const result = await controller.getFhirBundle('enc-101');
     expect(result).toEqual(mockFhirBundle);
     expect(service.getFhirBundle).toHaveBeenCalledWith('enc-101');
+  });
+
+  it('should finalize an encounter (Phase 8)', async () => {
+    const dto: FinalizeEncounterDto = { clinicianId: 'doc-smith' };
+    const result = await controller.finalizeEncounter('enc-101', dto);
+    expect(result.status).toBe('finalized');
+    expect(result.finalizedAt).toBeDefined();
+    expect(service.finalizeEncounter).toHaveBeenCalledWith('enc-101', 'doc-smith');
+  });
+
+  it('should get downstream integration summary (Phase 8)', async () => {
+    const result = await controller.getIntegrationPayload('enc-101');
+    expect(result).toEqual(mockIntegrationSummary);
+    expect(service.getIntegrationPayload).toHaveBeenCalledWith('enc-101');
   });
 });
 

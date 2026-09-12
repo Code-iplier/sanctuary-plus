@@ -541,6 +541,61 @@ describe('DocumentationService (Phase 1, 2, 3, 4, 5 & 6)', () => {
       );
     });
   });
+
+  describe('finalizeEncounter (Phase 8)', () => {
+    it('should finalize an encounter with clinical content, set status and audit metadata', async () => {
+      const finalized = await service.finalizeEncounter('enc-102', 'dr-house');
+
+      expect(finalized.status).toBe('finalized');
+      expect(finalized.finalizedAt).toBeDefined();
+      expect(finalized.finalizedBy).toBe('dr-house');
+      expect(finalized.fhirBundle).toBeDefined();
+      expect(finalized.fhirBundle?.total).toBeGreaterThan(0);
+    });
+
+    it('should reject finalization of empty draft encounters (safety validation)', async () => {
+      await expect(service.finalizeEncounter('enc-103')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw NotFoundException for unknown encounter', async () => {
+      await expect(service.finalizeEncounter('unknown-enc')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('getIntegrationPayload (Phase 8)', () => {
+    it('should return downstream integration payload for a finalized encounter', async () => {
+      const payload = await service.getIntegrationPayload('enc-101');
+
+      expect(payload).toBeDefined();
+      expect(payload.encounterId).toBe('enc-101');
+      expect(payload.patientId).toBe('1');
+      expect(payload.finalizedAt).toBeDefined();
+      expect(payload.finalizedBy).toBe('doc-smith');
+      expect(payload.timelineEvent.type).toBe('clinical-encounter');
+      expect(payload.timelineEvent.title).toContain('INPATIENT');
+      expect(payload.medReconciliationItems).toBeInstanceOf(Array);
+      expect(payload.riskAssessmentInput.diagnoses).toBeInstanceOf(Array);
+      expect(payload.riskAssessmentInput.vitals).toBeDefined();
+      expect(payload.fhirBundleSummary.totalResources).toBeGreaterThan(0);
+    });
+
+    it('should enforce clinical safety: block integration payload for unfinalized encounters', async () => {
+      // enc-103 is a draft encounter
+      await expect(service.getIntegrationPayload('enc-103')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw NotFoundException for unknown encounter', async () => {
+      await expect(service.getIntegrationPayload('unknown-enc')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
 });
 
 

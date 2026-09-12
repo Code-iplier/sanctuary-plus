@@ -94,6 +94,8 @@ export interface ClinicalEncounter {
   prescriptions?: PrescriptionItem[];
   clinicalImpression?: ClinicalImpression;
   fhirBundle?: FhirBundle;
+  finalizedAt?: string;
+  finalizedBy?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -110,6 +112,8 @@ export interface CreateEncounterDto {
   prescriptions?: PrescriptionItem[];
   clinicalImpression?: ClinicalImpression;
   fhirBundle?: FhirBundle;
+  finalizedAt?: string;
+  finalizedBy?: string;
 }
 
 export interface UpdateEncounterDto {
@@ -125,6 +129,8 @@ export interface UpdateEncounterDto {
   prescriptions?: PrescriptionItem[];
   clinicalImpression?: ClinicalImpression;
   fhirBundle?: FhirBundle;
+  finalizedAt?: string;
+  finalizedBy?: string;
 }
 
 export interface TranscribeAudioDto {
@@ -175,4 +181,36 @@ export interface FhirBundle {
   timestamp: string;
   total: number;
   entry: FhirBundleEntry[];
+}
+
+export interface FinalizeEncounterDto {
+  clinicianId?: string;
+}
+
+export interface PatientJourneyIntegrationSummary {
+  encounterId: string;
+  patientId: string;
+  finalizedAt: string;
+  finalizedBy: string;
+  timelineEvent: {
+    type: string;
+    title: string;
+    summary: string;
+    timestamp: string;
+  };
+  medReconciliationItems: {
+    medication: string;
+    dosage: string;
+    route: string;
+    frequency: string;
+    instructions: string;
+  }[];
+  riskAssessmentInput: {
+    diagnoses: string[];
+    vitals: Record<string, string>;
+  };
+  fhirBundleSummary: {
+    totalResources: number;
+    bundleId?: string;
+  };
 }
