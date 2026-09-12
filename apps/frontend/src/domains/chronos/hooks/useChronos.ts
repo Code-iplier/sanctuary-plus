@@ -12,6 +12,8 @@ import { getChronosSummary } from '../api/chronos.client';
 const MAX_HISTORY = 24;
 
 export type ChronosHistoryPoint = ChronosRiskPoint;
+export type ChronosConnectionState =
+  'INITIALIZING' | 'CONNECTING' | 'WAITING' | 'LIVE' | 'STALE' | 'OFFLINE';
 
 export type UseChronosReturn = {
   patients: Record<string, ChronosPatient>;
@@ -20,6 +22,9 @@ export type UseChronosReturn = {
   selectPatient: (id: string) => void;
   connected: boolean;
   apiOnline: boolean;
+  hasCheckedHealth: boolean;
+  connectionState: ChronosConnectionState;
+  lastEventAt: string | null;
   modelsLoaded: string[];
   predictionHistory: ChronosHistoryPoint[];
 };
@@ -29,6 +34,8 @@ export function useChronos(): UseChronosReturn {
   const [selected, setSelected] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [apiOnline, setApiOnline] = useState(false);
+  const [hasCheckedHealth, setHasCheckedHealth] = useState(false);
+  const [lastEventAt, setLastEventAt] = useState<string | null>(null);
   const [modelsLoaded, setModelsLoaded] = useState<string[]>([]);
   const [predictionHistory, setPredictionHistory] = useState<
     ChronosHistoryPoint[]
@@ -56,6 +63,8 @@ export function useChronos(): UseChronosReturn {
         if (cancelled) return;
         setApiOnline(false);
         setModelsLoaded([]);
+      } finally {
+        if (!cancelled) setHasCheckedHealth(true);
       }
     };
     check();
@@ -117,6 +126,7 @@ export function useChronos(): UseChronosReturn {
 
             setPatients((prev) => ({ ...prev, [pid]: data }));
             setPredictionHistory(nextHistory);
+            setLastEventAt(ts);
           } catch {
             // ignore malformed
           }
@@ -154,6 +164,18 @@ export function useChronos(): UseChronosReturn {
     };
   }, [apiOnline]);
 
+  const connectionState: ChronosConnectionState = !hasCheckedHealth
+    ? 'INITIALIZING'
+    : !apiOnline
+      ? Object.keys(patients).length
+        ? 'STALE'
+        : 'OFFLINE'
+      : !connected
+        ? 'CONNECTING'
+        : Object.keys(patients).length
+          ? 'LIVE'
+          : 'WAITING';
+
   return {
     patients,
     selected,
@@ -161,6 +183,9 @@ export function useChronos(): UseChronosReturn {
     selectPatient,
     connected,
     apiOnline,
+    hasCheckedHealth,
+    connectionState,
+    lastEventAt,
     modelsLoaded,
     predictionHistory,
   };

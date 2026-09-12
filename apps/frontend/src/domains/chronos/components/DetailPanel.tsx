@@ -20,7 +20,11 @@ function SHAPList({
   }[];
 }) {
   if (!drivers?.length)
-    return <p className="text-xs text-slate-400">No SHAP data.</p>;
+    return (
+      <p className="text-xs text-slate-400">
+        Model explanation unavailable for this prediction.
+      </p>
+    );
   const maxAbs = Math.max(...drivers.map((d) => Math.abs(d.shap_value)), 0.001);
   return (
     <div className="flex flex-col gap-1.5">
@@ -244,18 +248,37 @@ export function DetailPanel({ patient }: { patient: ChronosPatient | null }) {
           />
           <div className="mt-3">
             <p className="text-[10px] font-bold tracking-widest text-slate-500 mb-1.5">
-              SHAP DRIVERS
+              MODEL CONTRIBUTORS
+            </p>
+            <p className="text-[11px] text-slate-500 mb-2">
+              Features contributing to the current model output; these do not
+              establish causation.
             </p>
             <SHAPList drivers={p.shap_drivers} />
           </div>
         </Card>
       ))}
 
-      {metrics && (
+      {metrics ? (
         <Card className="p-4">
-          <p className="font-semibold text-sm text-slate-800 mb-2">
-            🔬 Physics Engine
-          </p>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div>
+              <p className="font-semibold text-sm text-slate-800">
+                Physics safety layer
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Independent physiological safety assessment.
+              </p>
+            </div>
+            <Badge
+              color={ca.physics_override_triggered ? 'danger' : 'success'}
+              variant="soft"
+            >
+              {ca.physics_override_triggered
+                ? 'OVERRIDE ACTIVE'
+                : 'NO OVERRIDE'}
+            </Badge>
+          </div>
           {ca.physics_override_triggered &&
             ca.alert_reasons.map((r: string, i: number) => (
               <Alert key={i} color="danger" className="text-xs mb-1">
@@ -268,9 +291,11 @@ export function DetailPanel({ patient }: { patient: ChronosPatient | null }) {
                 Tissue Hypoxia
               </p>
               <p
-                className={`font-semibold ${(metrics.tissue_hypoxia_index ?? 0) > 0.65 ? 'text-red-600' : 'text-slate-800'}`}
+                className={`font-semibold ${metrics.tissue_hypoxia_index > 0.65 ? 'text-red-600' : 'text-slate-800'}`}
               >
-                {((metrics.tissue_hypoxia_index ?? 0) * 100).toFixed(1)}%
+                {metrics.tissue_hypoxia_index != null
+                  ? `${(metrics.tissue_hypoxia_index * 100).toFixed(1)}%`
+                  : '—'}
               </p>
             </div>
             <div className="rounded-md bg-slate-50 border p-2">
@@ -278,12 +303,11 @@ export function DetailPanel({ patient }: { patient: ChronosPatient | null }) {
                 Hemodynamic Inst.
               </p>
               <p
-                className={`font-semibold ${(metrics.hemodynamic_instability_score ?? 0) > 0.65 ? 'text-red-600' : 'text-slate-800'}`}
+                className={`font-semibold ${metrics.hemodynamic_instability_score > 0.65 ? 'text-red-600' : 'text-slate-800'}`}
               >
-                {((metrics.hemodynamic_instability_score ?? 0) * 100).toFixed(
-                  1,
-                )}
-                %
+                {metrics.hemodynamic_instability_score != null
+                  ? `${(metrics.hemodynamic_instability_score * 100).toFixed(1)}%`
+                  : '—'}
               </p>
             </div>
             <div className="rounded-md bg-slate-50 border p-2">
@@ -298,15 +322,26 @@ export function DetailPanel({ patient }: { patient: ChronosPatient | null }) {
             </div>
             <div className="rounded-md bg-slate-50 border p-2">
               <p className="text-[9px] font-bold tracking-widest text-slate-500">
-                Override
+                Safety action
               </p>
               <p
-                className={`font-bold ${ca.physics_override_triggered ? 'text-red-600' : 'text-slate-600'}`}
+                className={`font-bold ${ca.physics_override_triggered ? 'text-red-600' : 'text-emerald-700'}`}
               >
-                {ca.physics_override_triggered ? '🚨 FIRED' : 'Normal'}
+                {ca.physics_override_triggered
+                  ? 'Override active'
+                  : 'No override'}
               </p>
             </div>
           </div>
+        </Card>
+      ) : (
+        <Card className="p-4">
+          <p className="font-semibold text-sm text-slate-800">
+            Physics safety layer
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            Physics safety assessment unavailable for this prediction.
+          </p>
         </Card>
       )}
       <GroundTruthValidation patient={patient} />

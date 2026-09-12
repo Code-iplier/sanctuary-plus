@@ -4,38 +4,39 @@ import { Activity, AlertTriangle, HeartPulse, Radio } from 'lucide-react';
 import { useChronosContext } from '../context/ChronosContext';
 import { PatientCard } from '../components/PatientCard';
 import { DetailPanel } from '../components/DetailPanel';
-import type { RiskFilter } from '../model/chronos.types';
+import { ChronosWorkspaceState } from '../components/ChronosWorkspaceState';
+import type { ChronosPatient, RiskFilter } from '../model/chronos.types';
 
 const SORT_OPTIONS = [
   {
     id: 'crash_prob',
     label: 'Crash Probability ↓',
-    getter: (p: any) => p.crash_probability_score || 0,
+    getter: (p: ChronosPatient) => p.crash_probability_score || 0,
     desc: true,
   },
   {
     id: 'sofa',
     label: 'SOFA ↓',
-    getter: (p: any) => p.clinical_scores?.sofa_score || 0,
+    getter: (p: ChronosPatient) => p.clinical_scores?.sofa_score || 0,
     desc: true,
   },
   {
     id: 'news2',
     label: 'NEWS2 ↓',
-    getter: (p: any) => p.clinical_scores?.news2_score || 0,
+    getter: (p: ChronosPatient) => p.clinical_scores?.news2_score || 0,
     desc: true,
   },
   {
     id: 'sepsis',
     label: 'Sepsis ↓',
-    getter: (p: any) =>
+    getter: (p: ChronosPatient) =>
       p.predictions?.septic_shock?.risk_probability_percentage || 0,
     desc: true,
   },
   {
     id: 'cardiac',
     label: 'Cardiac ↓',
-    getter: (p: any) =>
+    getter: (p: ChronosPatient) =>
       p.predictions?.cardiac_arrest?.risk_probability_percentage || 0,
     desc: true,
   },
@@ -58,6 +59,8 @@ export function TriagePage() {
     connected,
     apiOnline,
     modelsLoaded,
+    connectionState,
+    lastEventAt,
   } = useChronosContext();
   const [sortBy, setSortBy] = useState('crash_prob');
   const [filterRisk, setFilterRisk] = useState<RiskFilter>('ALL');
@@ -69,7 +72,7 @@ export function TriagePage() {
         ? all
         : all.filter((p) => p.crash_risk_level === filterRisk);
     const opt = SORT_OPTIONS.find((s) => s.id === sortBy) ?? SORT_OPTIONS[0];
-    return [...filtered].sort((a: any, b: any) => {
+    return [...filtered].sort((a, b) => {
       const va = opt.getter(a);
       const vb = opt.getter(b);
       return opt.desc
@@ -87,50 +90,32 @@ export function TriagePage() {
     });
     return counts;
   }, [patients]);
-  const lastUpdate = useMemo(
-    () =>
-      Object.values(patients)
-        .map((p) => p.last_updated ?? p.timestamp)
-        .filter(Boolean)
-        .sort()
-        .at(-1) ?? null,
-    [patients],
-  );
+  const lastUpdate =
+    lastEventAt ??
+    Object.values(patients)
+      .map((p) => p.last_updated ?? p.timestamp)
+      .filter(Boolean)
+      .sort()
+      .at(-1) ??
+    null;
   const hasPatients = totalCount > 0;
-  const isLoading = !apiOnline && !hasPatients;
-  const isOffline = !apiOnline && hasPatients;
-  const isStreamDisconnected = apiOnline && !connected;
+  const showScaffold = !hasPatients && connectionState !== 'LIVE';
 
   return (
     <div className="flex flex-col gap-3">
       {/* Connection / status band — distinct states without fake data */}
-      {isLoading && (
-        <Card className="p-3 flex items-center gap-3">
-          <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-          <div>
-            <p className="text-sm font-semibold text-slate-700">
-              Connecting to Chronos
-            </p>
-            <p className="text-xs text-slate-500">
-              Checking FastAPI health at /api/chronos/summary · Retrying every
-              10s.
-            </p>
-          </div>
-        </Card>
-      )}
-      {!isLoading && !apiOnline && (
+      {connectionState === 'STALE' && (
         <Alert color="danger" className="text-xs">
-          <span className="font-semibold">Chronos API offline</span> — FastAPI
-          8000 unreachable. No new predictions will arrive. Existing patients
-          remain visible but are stale.
+          <span className="font-semibold">Chronos API offline</span> — no new
+          predictions will arrive. Retained patient values remain visible and
+          should be treated as stale.
         </Alert>
       )}
-      {apiOnline && isStreamDisconnected && (
+      {connectionState === 'CONNECTING' && hasPatients && (
         <Alert color="warning" className="text-xs">
           Chronos API online ·{' '}
-          <span className="font-semibold">Live stream disconnected</span> —
-          Reconnecting to /ws/triage/all automatically. Predictions remain
-          accessible via REST.
+          <span className="font-semibold">live stream reconnecting</span>.
+          Retained predictions stay visible while Chronos reconnects.
         </Alert>
       )}
 
@@ -154,8 +139,7 @@ export function TriagePage() {
           <span
             className={`chronos-live-state ${connected ? 'is-live' : 'is-muted'}`}
           >
-            <Radio size={13} />{' '}
-            {connected ? 'LIVE' : apiOnline ? 'RECONNECTING' : 'OFFLINE'}
+            <Radio size={13} /> {connectionState}
           </span>
           <span>
             Last event{' '}
@@ -243,31 +227,7 @@ export function TriagePage() {
         </div>
       </Card>
 
-      {/* Empty — explicit no-patients, no fake rows */}
-      {!hasPatients && apiOnline && connected && (
-        <Card className="p-8 text-center">
-          <div className="text-2xl mb-2">📡</div>
-          <p className="font-semibold text-slate-700">No active patients</p>
-          <p className="text-xs text-slate-500 mt-1">
-            Chronos is connected. Patients appear here when the streamer posts
-            vitals to FastAPI /predict and events flow through /ws/triage/all.
-          </p>
-          <p className="text-[11px] font-mono text-slate-400 mt-2">
-            POST /api/chronos/predict → services/chronos → /ws/triage/all
-          </p>
-        </Card>
-      )}
-      {!hasPatients && apiOnline && !connected && !isLoading && (
-        <Card className="p-6 text-center">
-          <p className="text-sm font-semibold text-slate-700">
-            Waiting for stream
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            API is online but triage stream is reconnecting. Patients will
-            appear once WebSocket re-establishes.
-          </p>
-        </Card>
-      )}
+      {showScaffold ? <ChronosWorkspaceState state={connectionState} /> : null}
 
       {/* Patient list + detail — responsive, no horizontal overflow */}
       {hasPatients && (
@@ -279,7 +239,7 @@ export function TriagePage() {
                 all.
               </Card>
             ) : (
-              displayPatients.map((p: any) => (
+              displayPatients.map((p) => (
                 <PatientCard
                   key={p.patient_id}
                   patient={p}

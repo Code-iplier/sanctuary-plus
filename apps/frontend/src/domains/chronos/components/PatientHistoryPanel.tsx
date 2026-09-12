@@ -125,10 +125,70 @@ export function PatientHistoryPanel({
 
   if (!patient) return null;
   const latestRows = [...history].reverse();
+  const latestReading = latestRows[0];
   const riskPoints = patient._riskHistory ?? [];
 
   return (
     <div className="flex flex-col gap-3">
+      <Card className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="font-semibold text-sm text-slate-800">
+              Current physiology
+            </h4>
+            <p className="text-xs text-slate-500 mt-1">
+              Most recent retained Chronos reading
+              {latestReading?.timestamp
+                ? ` · ${formatTime(latestReading.timestamp)}`
+                : ''}
+              .
+            </p>
+          </div>
+        </div>
+        {loading ? (
+          <div
+            className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3"
+            aria-label="Loading current physiology"
+          >
+            {Array.from({ length: 6 }, (_, index) => (
+              <div
+                key={index}
+                className="h-14 rounded-md bg-slate-100 animate-pulse"
+              />
+            ))}
+          </div>
+        ) : !latestReading ? (
+          <p className="text-xs text-slate-400 mt-3">
+            No retained vital reading is currently available.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
+            {[
+              ['HR', latestReading.heart_rate, 'bpm', 0],
+              ['MAP', latestReading.mean_arterial_pressure, 'mmHg', 0],
+              ['SpO₂', latestReading.spo2, '%', 0],
+              ['RR', latestReading.respiratory_rate, '/min', 0],
+              ['Temp', latestReading.temperature, '°C', 1],
+              ['Lactate', latestReading.lactate, 'mmol/L', 1],
+            ].map(([label, value, unit, digits]) => (
+              <div
+                key={String(label)}
+                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
+              >
+                <p className="text-[9px] font-bold tracking-widest text-slate-500">
+                  {label}
+                </p>
+                <p className="mt-0.5 font-semibold text-slate-800">
+                  {formatValue(value, Number(digits))}{' '}
+                  <span className="text-[11px] font-normal text-slate-500">
+                    {unit}
+                  </span>
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
       <Card className="p-4">
         <div className="flex items-center justify-between gap-2">
           <div>
@@ -166,7 +226,7 @@ export function PatientHistoryPanel({
         ) : null}
         {!loading && !error && !history.length ? (
           <p className="text-xs text-slate-400 mt-3">
-            No readings retained yet.
+            No retained patient history is currently available.
           </p>
         ) : null}
         {latestRows.length ? (
