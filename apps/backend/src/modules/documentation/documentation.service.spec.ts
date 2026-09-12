@@ -5,7 +5,13 @@ import { TranscriptionProvider, TranscriptionResult } from './transcription.prov
 import { ExtractionProvider } from './extraction.provider';
 import { SoapProvider } from './soap.provider';
 import { PrescriptionProvider } from './prescription.provider';
-import type { ClinicalExtraction, SoapNote, PrescriptionItem } from './documentation.types';
+import { DiagnosisProvider } from './diagnosis.provider';
+import type {
+  ClinicalExtraction,
+  SoapNote,
+  PrescriptionItem,
+  ClinicalImpression,
+} from './documentation.types';
 
 class MockTranscriptionProvider extends TranscriptionProvider {
   async transcribe(): Promise<TranscriptionResult> {
@@ -75,23 +81,61 @@ class MockPrescriptionProvider extends PrescriptionProvider {
   }
 }
 
-describe('DocumentationService (Phase 1, 2, 3, 4 & 5)', () => {
+class MockDiagnosisProvider extends DiagnosisProvider {
+  async suggestDiagnoses(
+    transcript: string,
+  ): Promise<ClinicalImpression> {
+    if (!transcript || transcript.trim().length < 5) {
+      throw new BadRequestException('Transcript too short');
+    }
+    return {
+      summary: 'Mock clinical impression summary.',
+      diagnoses: [
+        {
+          id: 'diag-mock-1',
+          name: 'Acute Bronchitis',
+          code: 'J20.9',
+          type: 'primary',
+          certainty: 'probable',
+          supportingEvidence: ['Cough', 'Fever'],
+          status: 'suggested',
+        },
+        {
+          id: 'diag-mock-2',
+          name: 'Viral Syndrome',
+          code: 'B34.9',
+          type: 'differential',
+          certainty: 'suspected',
+          supportingEvidence: ['Mild fever'],
+          status: 'suggested',
+        },
+      ],
+      generatedAt: '2026-09-13T00:00:00.000Z',
+      isReviewed: false,
+    };
+  }
+}
+
+describe('DocumentationService (Phase 1, 2, 3, 4, 5 & 6)', () => {
   let service: DocumentationService;
   let mockTranscriptionProvider: MockTranscriptionProvider;
   let mockExtractionProvider: MockExtractionProvider;
   let mockSoapProvider: MockSoapProvider;
   let mockPrescriptionProvider: MockPrescriptionProvider;
+  let mockDiagnosisProvider: MockDiagnosisProvider;
 
   beforeEach(() => {
     mockTranscriptionProvider = new MockTranscriptionProvider();
     mockExtractionProvider = new MockExtractionProvider();
     mockSoapProvider = new MockSoapProvider();
     mockPrescriptionProvider = new MockPrescriptionProvider();
+    mockDiagnosisProvider = new MockDiagnosisProvider();
     service = new DocumentationService(
       mockTranscriptionProvider,
       mockExtractionProvider,
       mockSoapProvider,
       mockPrescriptionProvider,
+      mockDiagnosisProvider,
     );
   });
 
@@ -389,6 +433,69 @@ describe('DocumentationService (Phase 1, 2, 3, 4 & 5)', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('suggestDiagnoses (Phase 6)', () => {
+    it('should synthesize clinical impression and diagnoses for encounter with transcript', async () => {
+      const impression = await service.suggestDiagnoses('enc-101');
+      expect(impression).toBeDefined();
+      expect(impression.summary).toBe('Mock clinical impression summary.');
+      expect(impression.diagnoses.length).toBe(2);
+      expect(impression.diagnoses[0].name).toBe('Acute Bronchitis');
+      expect(impression.diagnoses[0].type).toBe('primary');
+
+      const encounter = await service.getEncounterById('enc-101');
+      expect(encounter.clinicalImpression).toBeDefined();
+      expect(encounter.clinicalImpression?.diagnoses.length).toBe(2);
+    });
+
+    it('should throw BadRequestException when encounter has empty transcript', async () => {
+      await expect(service.suggestDiagnoses('enc-103')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw NotFoundException for unknown encounter', async () => {
+      await expect(service.suggestDiagnoses('unknown-enc-id')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('updateDiagnoses (Phase 6)', () => {
+    it('should update clinical impression and mark it reviewed', async () => {
+      const updatedImpression = {
+        summary: 'Clinician updated impression summary.',
+        diagnoses: [
+          {
+            id: 'diag-rev-1',
+            name: 'Acute Bronchitis',
+            code: 'J20.9',
+            type: 'primary' as const,
+            certainty: 'confirmed' as const,
+            supportingEvidence: ['Wheezing', 'Productive cough'],
+            status: 'confirmed' as const,
+          },
+        ],
+      };
+
+      const updatedEncounter = await service.updateDiagnoses('enc-101', updatedImpression);
+      expect(updatedEncounter.clinicalImpression).toBeDefined();
+      expect(updatedEncounter.clinicalImpression?.summary).toBe('Clinician updated impression summary.');
+      expect(updatedEncounter.clinicalImpression?.diagnoses[0].status).toBe('confirmed');
+      expect(updatedEncounter.clinicalImpression?.isReviewed).toBe(true);
+      expect(updatedEncounter.clinicalImpression?.reviewedAt).toBeDefined();
+    });
+
+    it('should throw NotFoundException when updating diagnoses for non-existent encounter', async () => {
+      await expect(
+        service.updateDiagnoses('unknown-enc', {
+          summary: 'Test',
+          diagnoses: [],
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
 });
+
 
 

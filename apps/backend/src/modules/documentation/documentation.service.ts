@@ -13,11 +13,13 @@ import type {
   ClinicalExtraction,
   SoapNote,
   PrescriptionItem,
+  ClinicalImpression,
 } from './documentation.types';
 import { TranscriptionProvider } from './transcription.provider';
 import { ExtractionProvider } from './extraction.provider';
 import { SoapProvider } from './soap.provider';
 import { PrescriptionProvider } from './prescription.provider';
+import { DiagnosisProvider } from './diagnosis.provider';
 
 @Injectable()
 export class DocumentationService {
@@ -31,6 +33,7 @@ export class DocumentationService {
     private readonly extractionProvider: ExtractionProvider,
     private readonly soapProvider: SoapProvider,
     private readonly prescriptionProvider: PrescriptionProvider,
+    private readonly diagnosisProvider: DiagnosisProvider,
   ) {
     this.seedInitialEncounters();
   }
@@ -128,6 +131,46 @@ export class DocumentationService {
             status: 'suggested',
           },
         ],
+        clinicalImpression: {
+          summary:
+            'Acute coronary syndrome presentation with exertional substernal crushing chest pressure radiating to the left arm and autonomic symptoms in a hypertensive patient.',
+          diagnoses: [
+            {
+              id: 'diag-101-1',
+              name: 'Acute Coronary Syndrome (Suspected)',
+              code: 'I21.9',
+              type: 'primary',
+              certainty: 'probable',
+              supportingEvidence: [
+                'Crushing substernal chest pressure radiating to left arm',
+                'Diaphoresis during exertional stair climbing',
+                'Dyspnea on exertion',
+              ],
+              status: 'suggested',
+            },
+            {
+              id: 'diag-101-2',
+              name: 'Gastroesophageal Reflux Disease (GERD)',
+              code: 'K21.9',
+              type: 'differential',
+              certainty: 'suspected',
+              supportingEvidence: ['Retrosternal discomfort'],
+              status: 'suggested',
+            },
+            {
+              id: 'diag-101-3',
+              name: 'Musculoskeletal Chest Wall Strain',
+              code: 'R07.89',
+              type: 'differential',
+              certainty: 'suspected',
+              supportingEvidence: ['Onset during exertion on stairs'],
+              status: 'suggested',
+            },
+          ],
+          generatedAt: new Date(Date.now() - 3400000).toISOString(),
+          reviewedAt: new Date(Date.now() - 3300000).toISOString(),
+          isReviewed: true,
+        },
         createdAt: new Date(Date.now() - 7200000).toISOString(),
         updatedAt: new Date(Date.now() - 3600000).toISOString(),
       },
@@ -193,6 +236,37 @@ export class DocumentationService {
             status: 'suggested',
           },
         ],
+        clinicalImpression: {
+          summary:
+            'Essential hypertension, well-controlled on current medical therapy without target organ damage or acute symptoms.',
+          diagnoses: [
+            {
+              id: 'diag-102-1',
+              name: 'Essential (Primary) Hypertension',
+              code: 'I10',
+              type: 'primary',
+              certainty: 'confirmed',
+              supportingEvidence: [
+                'Documented history of essential hypertension',
+                'Stable clinic blood pressure on Lisinopril (125/80 mmHg)',
+                'Absence of secondary hypertension symptoms',
+              ],
+              status: 'confirmed',
+            },
+            {
+              id: 'diag-102-2',
+              name: 'Secondary Hypertension (Renal Artery Stenosis rule-out)',
+              code: 'I15.0',
+              type: 'differential',
+              certainty: 'suspected',
+              supportingEvidence: ['Differential screening consideration in chronic hypertension'],
+              status: 'ruled-out',
+            },
+          ],
+          generatedAt: new Date(Date.now() - 82600000).toISOString(),
+          reviewedAt: new Date(Date.now() - 82500000).toISOString(),
+          isReviewed: true,
+        },
         createdAt: new Date(Date.now() - 86400000).toISOString(),
         updatedAt: new Date(Date.now() - 82800000).toISOString(),
       },
@@ -258,6 +332,7 @@ export class DocumentationService {
       extraction: dto.extraction,
       soapNote: dto.soapNote,
       prescriptions: dto.prescriptions,
+      clinicalImpression: dto.clinicalImpression,
       createdAt: now,
       updatedAt: now,
     };
@@ -297,6 +372,10 @@ export class DocumentationService {
       soapNote: dto.soapNote !== undefined ? dto.soapNote : encounter.soapNote,
       prescriptions:
         dto.prescriptions !== undefined ? dto.prescriptions : encounter.prescriptions,
+      clinicalImpression:
+        dto.clinicalImpression !== undefined
+          ? dto.clinicalImpression
+          : encounter.clinicalImpression,
       updatedAt: now,
     };
 
@@ -508,6 +587,58 @@ export class DocumentationService {
     this.encounters.set(id, encounter);
     this.logger.log(
       `Updated prescriptions for encounter ${id} (${prescriptions.length} items)`,
+    );
+    return encounter;
+  }
+
+  async suggestDiagnoses(id: string): Promise<ClinicalImpression> {
+    const encounter = await this.getEncounterById(id);
+
+    if (!encounter.rawTranscript || encounter.rawTranscript.trim().length < 10) {
+      throw new BadRequestException(
+        'Encounter transcript is empty or too short for diagnosis synthesis. Please transcribe consultation audio first.',
+      );
+    }
+
+    this.logger.log(
+      `Suggesting diagnoses and clinical impression for encounter ${id} (transcript length: ${encounter.rawTranscript.length})`,
+    );
+
+    const impression = await this.diagnosisProvider.suggestDiagnoses(
+      encounter.rawTranscript,
+      encounter.extraction,
+      encounter.soapNote,
+    );
+
+    const now = new Date().toISOString();
+    encounter.clinicalImpression = impression;
+    encounter.updatedAt = now;
+
+    this.encounters.set(id, encounter);
+    this.logger.log(
+      `Encounter ${id} updated with synthesized clinical impression (${impression.diagnoses.length} diagnoses)`,
+    );
+
+    return impression;
+  }
+
+  async updateDiagnoses(
+    id: string,
+    clinicalImpression: ClinicalImpression,
+  ): Promise<ClinicalEncounter> {
+    const encounter = await this.getEncounterById(id);
+    const now = new Date().toISOString();
+
+    encounter.clinicalImpression = {
+      ...clinicalImpression,
+      reviewedAt: now,
+      isReviewed: true,
+    };
+    encounter.updatedAt = now;
+
+    this.encounters.set(id, encounter);
+    this.logger.log(
+      `Updated and reviewed clinical impression for encounter ${id} (${clinicalImpression.diagnoses.length} diagnoses)`,
     );
     return encounter;
   }

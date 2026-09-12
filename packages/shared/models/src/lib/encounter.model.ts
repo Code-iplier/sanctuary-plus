@@ -54,6 +54,28 @@ export interface PrescriptionItem {
   status: PrescriptionStatus;
 }
 
+export type DiagnosisType = 'primary' | 'differential';
+export type DiagnosisCertainty = 'suspected' | 'probable' | 'confirmed';
+export type DiagnosisStatus = 'suggested' | 'confirmed' | 'ruled-out';
+
+export interface DiagnosisItem {
+  id: string;
+  name: string;
+  code?: string;
+  type: DiagnosisType;
+  certainty: DiagnosisCertainty;
+  supportingEvidence: string[];
+  status: DiagnosisStatus;
+}
+
+export interface ClinicalImpression {
+  summary: string;
+  diagnoses: DiagnosisItem[];
+  generatedAt?: string;
+  reviewedAt?: string;
+  isReviewed?: boolean;
+}
+
 export interface ClinicalEncounter {
   id: string;
   patientId: string;
@@ -70,6 +92,7 @@ export interface ClinicalEncounter {
   extraction?: ClinicalExtraction;
   soapNote?: SoapNote;
   prescriptions?: PrescriptionItem[];
+  clinicalImpression?: ClinicalImpression;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,6 +107,7 @@ export interface CreateEncounterDto {
   extraction?: ClinicalExtraction;
   soapNote?: SoapNote;
   prescriptions?: PrescriptionItem[];
+  clinicalImpression?: ClinicalImpression;
 }
 
 export interface UpdateEncounterDto {
@@ -97,6 +121,7 @@ export interface UpdateEncounterDto {
   extraction?: ClinicalExtraction;
   soapNote?: SoapNote;
   prescriptions?: PrescriptionItem[];
+  clinicalImpression?: ClinicalImpression;
 }
 
 export interface TranscribeAudioDto {
@@ -130,6 +155,10 @@ export interface UpdateSoapNoteDto {
 
 export interface UpdatePrescriptionsDto {
   prescriptions: PrescriptionItem[];
+}
+
+export interface UpdateClinicalImpressionDto {
+  clinicalImpression: ClinicalImpression;
 }
 
 

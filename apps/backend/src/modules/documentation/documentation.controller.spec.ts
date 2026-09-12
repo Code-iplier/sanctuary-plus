@@ -13,6 +13,8 @@ import type {
   UpdateSoapNoteDto,
   PrescriptionItem,
   UpdatePrescriptionsDto,
+  ClinicalImpression,
+  UpdateClinicalImpressionDto,
 } from './documentation.types';
 
 describe('DocumentationController', () => {
@@ -30,6 +32,23 @@ describe('DocumentationController', () => {
     status: 'suggested',
   };
 
+  const mockClinicalImpression: ClinicalImpression = {
+    summary: 'Patient presents with acute bronchitis.',
+    diagnoses: [
+      {
+        id: 'diag-1',
+        name: 'Acute Bronchitis',
+        code: 'J20.9',
+        type: 'primary',
+        certainty: 'probable',
+        supportingEvidence: ['Cough', 'Mild wheezing'],
+        status: 'suggested',
+      },
+    ],
+    generatedAt: '2026-09-13T00:00:00.000Z',
+    isReviewed: false,
+  };
+
   const mockEncounter: ClinicalEncounter = {
     id: 'enc-101',
     patientId: '1',
@@ -41,6 +60,7 @@ describe('DocumentationController', () => {
     rawTranscript: '[Doctor]: Patient has cough and fever.',
     transcriptReviewed: true,
     prescriptions: [mockPrescription],
+    clinicalImpression: mockClinicalImpression,
   };
 
   const mockExtraction: ClinicalExtraction = {
@@ -94,6 +114,11 @@ describe('DocumentationController', () => {
       updatePrescriptions: vi.fn().mockResolvedValue({
         ...mockEncounter,
         prescriptions: [mockPrescription],
+      }),
+      suggestDiagnoses: vi.fn().mockResolvedValue(mockClinicalImpression),
+      updateDiagnoses: vi.fn().mockResolvedValue({
+        ...mockEncounter,
+        clinicalImpression: mockClinicalImpression,
       }),
     } as unknown as DocumentationService;
 
@@ -182,6 +207,19 @@ describe('DocumentationController', () => {
     const result = await controller.updatePrescriptions('enc-101', dto);
     expect(result.prescriptions).toEqual([mockPrescription]);
     expect(service.updatePrescriptions).toHaveBeenCalledWith('enc-101', [mockPrescription]);
+  });
+
+  it('should suggest diagnoses (Phase 6)', async () => {
+    const result = await controller.suggestDiagnoses('enc-101');
+    expect(result).toEqual(mockClinicalImpression);
+    expect(service.suggestDiagnoses).toHaveBeenCalledWith('enc-101');
+  });
+
+  it('should update diagnoses (Phase 6)', async () => {
+    const dto: UpdateClinicalImpressionDto = { clinicalImpression: mockClinicalImpression };
+    const result = await controller.updateDiagnoses('enc-101', dto);
+    expect(result.clinicalImpression).toEqual(mockClinicalImpression);
+    expect(service.updateDiagnoses).toHaveBeenCalledWith('enc-101', mockClinicalImpression);
   });
 });
 

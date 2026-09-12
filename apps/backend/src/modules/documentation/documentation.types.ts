@@ -16,6 +16,12 @@ export type {
   PrescriptionStatus,
   PrescriptionItem,
   UpdatePrescriptionsDto,
+  DiagnosisType,
+  DiagnosisCertainty,
+  DiagnosisStatus,
+  DiagnosisItem,
+  ClinicalImpression,
+  UpdateClinicalImpressionDto,
 } from '@org/models';
 
 

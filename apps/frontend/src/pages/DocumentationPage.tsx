@@ -24,6 +24,7 @@ import {
   Trash2,
   Check,
   Ban,
+  Stethoscope,
 } from 'lucide-react';
 
 export type EncounterStatus = 'draft' | 'reviewed' | 'finalized';
@@ -74,6 +75,28 @@ export interface PrescriptionItem {
   status: PrescriptionStatus;
 }
 
+export type DiagnosisType = 'primary' | 'differential';
+export type DiagnosisCertainty = 'suspected' | 'probable' | 'confirmed';
+export type DiagnosisStatus = 'suggested' | 'confirmed' | 'ruled-out';
+
+export interface DiagnosisItem {
+  id: string;
+  name: string;
+  code?: string;
+  type: DiagnosisType;
+  certainty: DiagnosisCertainty;
+  supportingEvidence: string[];
+  status: DiagnosisStatus;
+}
+
+export interface ClinicalImpression {
+  summary: string;
+  diagnoses: DiagnosisItem[];
+  generatedAt?: string;
+  reviewedAt?: string;
+  isReviewed?: boolean;
+}
+
 export interface ClinicalEncounter {
   id: string;
   patientId: string;
@@ -90,6 +113,7 @@ export interface ClinicalEncounter {
   extraction?: ClinicalExtraction;
   soapNote?: SoapNote;
   prescriptions?: PrescriptionItem[];
+  clinicalImpression?: ClinicalImpression;
   createdAt: string;
   updatedAt: string;
 }
@@ -183,6 +207,46 @@ const INITIAL_ENCOUNTERS: ClinicalEncounter[] = [
         status: 'suggested',
       },
     ],
+    clinicalImpression: {
+      summary:
+        'Acute coronary syndrome presentation with exertional substernal crushing chest pressure radiating to the left arm and autonomic symptoms in a hypertensive patient.',
+      diagnoses: [
+        {
+          id: 'diag-101-1',
+          name: 'Acute Coronary Syndrome (Suspected)',
+          code: 'I21.9',
+          type: 'primary',
+          certainty: 'probable',
+          supportingEvidence: [
+            'Crushing substernal chest pressure radiating to left arm',
+            'Diaphoresis during exertional stair climbing',
+            'Dyspnea on exertion',
+          ],
+          status: 'suggested',
+        },
+        {
+          id: 'diag-101-2',
+          name: 'Gastroesophageal Reflux Disease (GERD)',
+          code: 'K21.9',
+          type: 'differential',
+          certainty: 'suspected',
+          supportingEvidence: ['Retrosternal discomfort'],
+          status: 'suggested',
+        },
+        {
+          id: 'diag-101-3',
+          name: 'Musculoskeletal Chest Wall Strain',
+          code: 'R07.89',
+          type: 'differential',
+          certainty: 'suspected',
+          supportingEvidence: ['Onset during exertion on stairs'],
+          status: 'suggested',
+        },
+      ],
+      generatedAt: new Date(Date.now() - 3400000).toISOString(),
+      reviewedAt: new Date(Date.now() - 3300000).toISOString(),
+      isReviewed: true,
+    },
     createdAt: new Date(Date.now() - 7200000).toISOString(),
     updatedAt: new Date(Date.now() - 3600000).toISOString(),
   },
@@ -243,6 +307,37 @@ const INITIAL_ENCOUNTERS: ClinicalEncounter[] = [
         status: 'suggested',
       },
     ],
+    clinicalImpression: {
+      summary:
+        'Essential hypertension, well-controlled on current medical therapy without target organ damage or acute symptoms.',
+      diagnoses: [
+        {
+          id: 'diag-102-1',
+          name: 'Essential (Primary) Hypertension',
+          code: 'I10',
+          type: 'primary',
+          certainty: 'confirmed',
+          supportingEvidence: [
+            'Documented history of essential hypertension',
+            'Stable clinic blood pressure on Lisinopril (125/80 mmHg)',
+            'Absence of secondary hypertension symptoms',
+          ],
+          status: 'confirmed',
+        },
+        {
+          id: 'diag-102-2',
+          name: 'Secondary Hypertension (Renal Artery Stenosis rule-out)',
+          code: 'I15.0',
+          type: 'differential',
+          certainty: 'suspected',
+          supportingEvidence: ['Differential screening consideration in chronic hypertension'],
+          status: 'ruled-out',
+        },
+      ],
+      generatedAt: new Date(Date.now() - 82600000).toISOString(),
+      reviewedAt: new Date(Date.now() - 82500000).toISOString(),
+      isReviewed: true,
+    },
     createdAt: new Date(Date.now() - 86400000).toISOString(),
     updatedAt: new Date(Date.now() - 82800000).toISOString(),
   },
@@ -297,6 +392,21 @@ export default function DocumentationPage() {
   const [newMedInstructions, setNewMedInstructions] = useState<string>('');
   const [showAddPrescription, setShowAddPrescription] = useState<boolean>(false);
 
+  // Phase 6: Diagnosis & Clinical Impression state
+  const [clinicalImpression, setClinicalImpression] = useState<ClinicalImpression | null>(null);
+  const [isSuggestingDiagnoses, setIsSuggestingDiagnoses] = useState<boolean>(false);
+  const [isSavingDiagnoses, setIsSavingDiagnoses] = useState<boolean>(false);
+  const [isEditingImpression, setIsEditingImpression] = useState<boolean>(false);
+  const [impressionSummaryText, setImpressionSummaryText] = useState<string>('');
+
+  // Manual diagnosis addition state
+  const [newDiagName, setNewDiagName] = useState<string>('');
+  const [newDiagCode, setNewDiagCode] = useState<string>('');
+  const [newDiagType, setNewDiagType] = useState<DiagnosisType>('differential');
+  const [newDiagCertainty, setNewDiagCertainty] = useState<DiagnosisCertainty>('suspected');
+  const [newDiagEvidence, setNewDiagEvidence] = useState<string>('');
+  const [showAddDiagnosis, setShowAddDiagnosis] = useState<boolean>(false);
+
   // New item inputs for each category in extraction editor
   const [newSymptom, setNewSymptom] = useState<string>('');
   const [newFinding, setNewFinding] = useState<string>('');
@@ -344,6 +454,10 @@ export default function DocumentationPage() {
       setIsEditingSoap(false);
       setPrescriptions(activeEncounter.prescriptions || []);
       setShowAddPrescription(false);
+      setClinicalImpression(activeEncounter.clinicalImpression || null);
+      setImpressionSummaryText(activeEncounter.clinicalImpression?.summary || '');
+      setIsEditingImpression(false);
+      setShowAddDiagnosis(false);
       setAudioBlob(null);
       setAudioUrl(null);
       setUploadedFileName(null);
@@ -1141,6 +1255,207 @@ export default function DocumentationPage() {
     setShowAddPrescription(false);
   };
 
+  // Real Phase 6: Suggest Diagnoses and Clinical Impression using Gemini
+  const handleSuggestDiagnoses = async () => {
+    const transcriptText = editableTranscript.trim();
+    if (!transcriptText || transcriptText.length < 10) {
+      setAlertInfo({
+        type: 'warning',
+        message:
+          'Transcript is too short or empty to synthesize diagnoses. Please provide consultation text first.',
+      });
+      return;
+    }
+
+    setIsSuggestingDiagnoses(true);
+    setAlertInfo(null);
+
+    try {
+      if (editableTranscript !== activeEncounter.rawTranscript) {
+        await fetch(`/api/encounters/${activeEncounter.id}/transcript`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transcript: editableTranscript,
+            clinicianId: activeEncounter.clinicianId || 'doc-smith',
+          }),
+        });
+      }
+
+      const response = await fetch(
+        `/api/encounters/${activeEncounter.id}/diagnoses/suggest`,
+        {
+          method: 'POST',
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `Diagnosis synthesis failed (HTTP ${response.status})`,
+        );
+      }
+
+      const suggestedImpression: ClinicalImpression = await response.json();
+      setClinicalImpression(suggestedImpression);
+      setImpressionSummaryText(suggestedImpression.summary);
+
+      // Update active encounter in encounters list
+      setEncounters((prev) =>
+        prev.map((enc) =>
+          enc.id === activeEncounter.id
+            ? {
+                ...enc,
+                clinicalImpression: suggestedImpression,
+                rawTranscript: editableTranscript,
+                updatedAt: new Date().toISOString(),
+              }
+            : enc,
+        ),
+      );
+
+      setAlertInfo({
+        type: 'success',
+        message: `Synthesized clinical impression with ${suggestedImpression.diagnoses.length} diagnoses (primary & differentials) and ICD-10 code hints. Review below.`,
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAlertInfo({
+        type: 'danger',
+        message: `Failed to suggest diagnoses: ${error.message}`,
+      });
+    } finally {
+      setIsSuggestingDiagnoses(false);
+    }
+  };
+
+  // Save clinician-reviewed diagnosis list and impression summary
+  const handleSaveDiagnoses = async () => {
+    if (!clinicalImpression) return;
+
+    setIsSavingDiagnoses(true);
+    setAlertInfo(null);
+
+    const updatedImpression: ClinicalImpression = {
+      ...clinicalImpression,
+      summary: impressionSummaryText.trim() || clinicalImpression.summary,
+      reviewedAt: new Date().toISOString(),
+      isReviewed: true,
+    };
+
+    try {
+      const response = await fetch(
+        `/api/encounters/${activeEncounter.id}/diagnoses`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clinicalImpression: updatedImpression }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `Failed to save diagnoses (HTTP ${response.status})`,
+        );
+      }
+
+      const updatedEncounter: ClinicalEncounter = await response.json();
+      setEncounters((prev) =>
+        prev.map((enc) =>
+          enc.id === activeEncounter.id ? updatedEncounter : enc,
+        ),
+      );
+      setClinicalImpression(updatedEncounter.clinicalImpression || updatedImpression);
+      setIsEditingImpression(false);
+
+      setAlertInfo({
+        type: 'success',
+        message: `Clinical impression and diagnoses successfully reviewed and saved for Encounter ${activeEncounter.id}.`,
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAlertInfo({
+        type: 'danger',
+        message: `Failed to save diagnoses: ${error.message}`,
+      });
+    } finally {
+      setIsSavingDiagnoses(false);
+    }
+  };
+
+  const handleConfirmDiagnosis = (id: string) => {
+    if (!clinicalImpression) return;
+    setClinicalImpression({
+      ...clinicalImpression,
+      diagnoses: clinicalImpression.diagnoses.map((d) =>
+        d.id === id ? { ...d, status: 'confirmed' as const, certainty: 'confirmed' as const } : d,
+      ),
+    });
+  };
+
+  const handleRuleOutDiagnosis = (id: string) => {
+    if (!clinicalImpression) return;
+    setClinicalImpression({
+      ...clinicalImpression,
+      diagnoses: clinicalImpression.diagnoses.map((d) =>
+        d.id === id ? { ...d, status: 'ruled-out' as const } : d,
+      ),
+    });
+  };
+
+  const handleDeleteDiagnosis = (id: string) => {
+    if (!clinicalImpression) return;
+    setClinicalImpression({
+      ...clinicalImpression,
+      diagnoses: clinicalImpression.diagnoses.filter((d) => d.id !== id),
+    });
+  };
+
+  const handleAddManualDiagnosis = () => {
+    if (!newDiagName.trim()) {
+      setAlertInfo({
+        type: 'warning',
+        message: 'Diagnosis name is required to add a diagnosis.',
+      });
+      return;
+    }
+
+    const newItem: DiagnosisItem = {
+      id: `diag-manual-${Date.now()}`,
+      name: newDiagName.trim(),
+      code: newDiagCode.trim() || undefined,
+      type: newDiagType,
+      certainty: newDiagCertainty,
+      supportingEvidence: newDiagEvidence
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      status: 'suggested',
+    };
+
+    const currentImpression = clinicalImpression || {
+      summary: 'Clinical impression established with clinician-documented diagnoses.',
+      diagnoses: [],
+      generatedAt: new Date().toISOString(),
+      isReviewed: false,
+    };
+
+    setClinicalImpression({
+      ...currentImpression,
+      diagnoses: [...currentImpression.diagnoses, newItem],
+    });
+
+    setNewDiagName('');
+    setNewDiagCode('');
+    setNewDiagType('differential');
+    setNewDiagCertainty('suspected');
+    setNewDiagEvidence('');
+    setShowAddDiagnosis(false);
+  };
+
   const formatSeconds = (sec: number) => {
     const m = Math.floor(sec / 60)
       .toString()
@@ -1461,6 +1776,25 @@ export default function DocumentationPage() {
                       <>
                         <Pill size={16} />
                         Suggest Prescriptions
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    onPress={handleSuggestDiagnoses}
+                    isDisabled={isSuggestingDiagnoses || !editableTranscript.trim()}
+                    className="flex items-center gap-1.5"
+                  >
+                    {isSuggestingDiagnoses ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin" />
+                        Diagnosing...
+                      </>
+                    ) : (
+                      <>
+                        <Stethoscope size={16} />
+                        Suggest Diagnoses
                       </>
                     )}
                   </Button>
@@ -2526,6 +2860,475 @@ export default function DocumentationPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Step 6: Diagnosis & Clinical Impression Section */}
+          <Card className="p-5 mt-4 flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-gray-200 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
+                  <Stethoscope size={20} />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-semibold">
+                      6. Diagnosis & Clinical Impression
+                    </h3>
+                    <Badge color="default" variant="soft">
+                      {clinicalImpression?.diagnoses.length || 0} Total
+                    </Badge>
+                    <Badge color="accent" variant="soft">
+                      {clinicalImpression?.diagnoses.filter((d) => d.type === 'primary').length || 0} Primary
+                    </Badge>
+                    <Badge color="default" variant="soft">
+                      {clinicalImpression?.diagnoses.filter((d) => d.type === 'differential').length || 0} Differential
+                    </Badge>
+                    {clinicalImpression?.diagnoses.some((d) => d.status === 'confirmed') && (
+                      <Badge color="success" variant="soft">
+                        {clinicalImpression?.diagnoses.filter((d) => d.status === 'confirmed').length} Confirmed
+                      </Badge>
+                    )}
+                    {clinicalImpression?.diagnoses.some((d) => d.status === 'ruled-out') && (
+                      <Badge color="danger" variant="soft">
+                        {clinicalImpression?.diagnoses.filter((d) => d.status === 'ruled-out').length} Ruled Out
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    AI-synthesized primary diagnosis and differential formulations with ICD-10 code hints, certainty scoring, and clinician verification.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setShowAddDiagnosis((prev) => !prev)}
+                  className="flex items-center gap-1.5 text-xs"
+                >
+                  <Plus size={14} />
+                  {showAddDiagnosis ? 'Close Form' : 'Add Diagnosis'}
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={handleSuggestDiagnoses}
+                  isDisabled={isSuggestingDiagnoses || !editableTranscript.trim()}
+                  className="flex items-center gap-1.5 text-xs"
+                >
+                  {isSuggestingDiagnoses ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      Synthesizing...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={14} />
+                      Suggest with Gemini
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onPress={handleSaveDiagnoses}
+                  isDisabled={isSavingDiagnoses || !clinicalImpression}
+                  className="flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                  <Save size={14} />
+                  {isSavingDiagnoses ? 'Saving...' : 'Save Diagnoses'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Clinical Impression Narrative Summary Card */}
+            {clinicalImpression && (
+              <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/40 bg-indigo-50/30 dark:bg-indigo-950/10 flex flex-col gap-2">
+                <div className="flex items-center justify-between pb-1 border-b border-indigo-200/50 dark:border-indigo-900/30">
+                  <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText size={14} />
+                    Clinical Impression Synthesis
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {isEditingImpression ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onPress={() => setIsEditingImpression(false)}
+                        className="text-xs px-2 h-7"
+                      >
+                        Cancel
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onPress={() => {
+                          setImpressionSummaryText(clinicalImpression.summary);
+                          setIsEditingImpression(true);
+                        }}
+                        className="text-xs px-2 h-7 flex items-center gap-1"
+                      >
+                        <Edit3 size={12} />
+                        Edit Narrative
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {isEditingImpression ? (
+                  <textarea
+                    value={impressionSummaryText}
+                    onChange={(e) => setImpressionSummaryText(e.target.value)}
+                    placeholder="Enter synthesized clinical impression summary..."
+                    className="w-full min-h-[80px] p-2 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed resize-y"
+                  />
+                ) : (
+                  <p className="text-xs text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-line">
+                    {clinicalImpression.summary || <span className="italic text-gray-400">No impression summary recorded</span>}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Manual Add Diagnosis Order Panel */}
+            {showAddDiagnosis && (
+              <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/40 bg-indigo-50/20 dark:bg-indigo-950/10 flex flex-col gap-3">
+                <div className="flex items-center justify-between pb-1 border-b border-indigo-200/50 dark:border-indigo-900/30">
+                  <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Plus size={14} />
+                    Add Diagnosis Item
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddDiagnosis(false)}
+                    className="text-gray-400 hover:text-gray-600 text-xs"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                  <div className="flex flex-col gap-1 lg:col-span-2">
+                    <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                      Diagnosis Name *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Acute Coronary Syndrome..."
+                      value={newDiagName}
+                      onChange={(e) => setNewDiagName(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                      ICD-10 Hint
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. I21.9, I10, J20.9..."
+                      value={newDiagCode}
+                      onChange={(e) => setNewDiagCode(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                      Formulation Type
+                    </label>
+                    <select
+                      value={newDiagType}
+                      onChange={(e) => setNewDiagType(e.target.value as DiagnosisType)}
+                      className="px-2 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="primary">Primary</option>
+                      <option value="differential">Differential</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                      Certainty
+                    </label>
+                    <select
+                      value={newDiagCertainty}
+                      onChange={(e) => setNewDiagCertainty(e.target.value as DiagnosisCertainty)}
+                      className="px-2 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="suspected">Suspected</option>
+                      <option value="probable">Probable</option>
+                      <option value="confirmed">Confirmed</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1 lg:col-span-5">
+                    <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                      Supporting Evidence (comma separated)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Chest pain with exertion, diaphoretic, elevated BP..."
+                      value={newDiagEvidence}
+                      onChange={(e) => setNewDiagEvidence(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div className="flex items-end justify-end lg:col-span-1">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onPress={handleAddManualDiagnosis}
+                      className="w-full text-xs flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      <Plus size={14} />
+                      Add Item
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Diagnoses List / Table */}
+            {!clinicalImpression || clinicalImpression.diagnoses.length === 0 ? (
+              <div className="p-8 rounded-xl border border-dashed border-gray-300 dark:border-zinc-700 flex flex-col items-center justify-center text-center gap-2">
+                <Stethoscope size={32} className="text-gray-400" />
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                  No diagnoses formulated for this encounter yet.
+                </p>
+                <p className="text-xs text-gray-500 max-w-md">
+                  Synthesize an evidence-based clinical impression with leading primary diagnosis, differential alternatives, and ICD-10 code hints using Gemini.
+                </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onPress={handleSuggestDiagnoses}
+                    isDisabled={isSuggestingDiagnoses || !editableTranscript.trim()}
+                    className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+                  >
+                    <Sparkles size={14} />
+                    Suggest Diagnoses with Gemini
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => setShowAddDiagnosis(true)}
+                    className="flex items-center gap-1.5 text-xs"
+                  >
+                    <Plus size={14} />
+                    Add Manually
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {/* Primary Diagnoses Subsection */}
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600" />
+                    Primary Diagnosis
+                  </span>
+                  <div className="divide-y divide-gray-200 dark:divide-zinc-800 border-2 border-indigo-200 dark:border-indigo-900/60 rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-sm">
+                    {clinicalImpression.diagnoses
+                      .filter((d) => d.type === 'primary')
+                      .map((diag) => (
+                        <div
+                          key={diag.id}
+                          className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:bg-indigo-50/20 dark:hover:bg-indigo-950/20 transition-colors"
+                        >
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            <div className="mt-0.5">
+                              {diag.status === 'confirmed' ? (
+                                <Badge color="success" variant="soft" className="text-[11px] flex items-center gap-1 font-semibold">
+                                  <Check size={12} /> Confirmed
+                                </Badge>
+                              ) : diag.status === 'ruled-out' ? (
+                                <Badge color="danger" variant="soft" className="text-[11px] flex items-center gap-1 font-semibold">
+                                  <Ban size={12} /> Ruled Out
+                                </Badge>
+                              ) : (
+                                <Badge color="warning" variant="soft" className="text-[11px] flex items-center gap-1 font-semibold">
+                                  <Sparkles size={12} /> Suggested
+                                </Badge>
+                              )}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-bold text-sm text-gray-900 dark:text-gray-100">
+                                  {diag.name}
+                                </span>
+                                {diag.code && (
+                                  <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800">
+                                    ICD-10: {diag.code}
+                                  </span>
+                                )}
+                                <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 capitalize">
+                                  Certainty: {diag.certainty}
+                                </span>
+                              </div>
+
+                              {diag.supportingEvidence.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                  <span className="text-[11px] text-gray-400 self-center">Evidence:</span>
+                                  {diag.supportingEvidence.map((ev, eIdx) => (
+                                    <span
+                                      key={eIdx}
+                                      className="px-2 py-0.5 text-[11px] rounded-md bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-zinc-700"
+                                    >
+                                      {ev}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 self-end sm:self-center">
+                            {diag.status !== 'confirmed' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onPress={() => handleConfirmDiagnosis(diag.id)}
+                                className="text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-xs flex items-center gap-1 px-2.5 h-8"
+                              >
+                                <Check size={14} />
+                                Confirm
+                              </Button>
+                            )}
+                            {diag.status !== 'ruled-out' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onPress={() => handleRuleOutDiagnosis(diag.id)}
+                                className="text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-xs flex items-center gap-1 px-2.5 h-8"
+                              >
+                                <Ban size={14} />
+                                Rule Out
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onPress={() => handleDeleteDiagnosis(diag.id)}
+                              className="text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs p-1.5 h-8 w-8 min-w-0"
+                              aria-label="Delete diagnosis"
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Differential Diagnoses Subsection */}
+                <div className="flex flex-col gap-2 mt-2">
+                  <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-gray-400" />
+                    Differential Diagnoses ({clinicalImpression.diagnoses.filter((d) => d.type === 'differential').length})
+                  </span>
+                  <div className="divide-y divide-gray-200 dark:divide-zinc-800 border border-gray-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-sm">
+                    {clinicalImpression.diagnoses
+                      .filter((d) => d.type === 'differential')
+                      .map((diag) => (
+                        <div
+                          key={diag.id}
+                          className="p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-colors"
+                        >
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            <div className="mt-0.5">
+                              {diag.status === 'confirmed' ? (
+                                <Badge color="success" variant="soft" className="text-[11px] flex items-center gap-1 font-semibold">
+                                  <Check size={12} /> Confirmed
+                                </Badge>
+                              ) : diag.status === 'ruled-out' ? (
+                                <Badge color="danger" variant="soft" className="text-[11px] flex items-center gap-1 font-semibold">
+                                  <Ban size={12} /> Ruled Out
+                                </Badge>
+                              ) : (
+                                <Badge color="default" variant="soft" className="text-[11px] flex items-center gap-1 font-semibold">
+                                  Differential
+                                </Badge>
+                              )}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                                  {diag.name}
+                                </span>
+                                {diag.code && (
+                                  <span className="px-2 py-0.5 rounded text-xs font-mono bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300">
+                                    ICD-10: {diag.code}
+                                  </span>
+                                )}
+                                <span className="text-xs text-gray-500 capitalize">
+                                  • Certainty: {diag.certainty}
+                                </span>
+                              </div>
+
+                              {diag.supportingEvidence.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                  {diag.supportingEvidence.map((ev, eIdx) => (
+                                    <span
+                                      key={eIdx}
+                                      className="px-2 py-0.5 text-[11px] rounded bg-gray-50 dark:bg-zinc-800/60 text-gray-600 dark:text-gray-400"
+                                    >
+                                      {ev}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 self-end sm:self-center">
+                            {diag.status !== 'confirmed' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onPress={() => handleConfirmDiagnosis(diag.id)}
+                                className="text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-xs flex items-center gap-1 px-2.5 h-8"
+                              >
+                                <Check size={14} />
+                                Confirm
+                              </Button>
+                            )}
+                            {diag.status !== 'ruled-out' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onPress={() => handleRuleOutDiagnosis(diag.id)}
+                                className="text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-xs flex items-center gap-1 px-2.5 h-8"
+                              >
+                                <Ban size={14} />
+                                Rule Out
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onPress={() => handleDeleteDiagnosis(diag.id)}
+                              className="text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs p-1.5 h-8 w-8 min-w-0"
+                              aria-label="Delete diagnosis"
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
                 </div>
               </div>
             )}
