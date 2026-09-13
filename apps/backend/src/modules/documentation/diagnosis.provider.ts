@@ -44,7 +44,7 @@ export class GeminiDiagnosisProvider implements DiagnosisProvider {
       );
     }
 
-    const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
     this.logger.log(
       `Dispatching diagnosis suggestion request to Gemini model [${model}] (transcript length: ${transcript.length} chars)`,
     );

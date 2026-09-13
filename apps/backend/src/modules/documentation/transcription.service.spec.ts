@@ -73,7 +73,7 @@ describe('AI-Assisted Transcription (Phase 2)', () => {
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       const calledUrl = fetchSpy.mock.calls[0][0] as string;
       expect(calledUrl).toContain('generativelanguage.googleapis.com');
-      expect(calledUrl).toContain('gemini-2.0-flash');
+      expect(calledUrl).toContain('gemini-3.6-flash');
       expect(calledUrl).toContain('key=test-gemini-key-12345');
 
       expect(result).toBeDefined();

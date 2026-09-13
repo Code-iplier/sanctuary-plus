@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import path from 'node:path';
 import { ChronosModule } from '../modules/chronos/chronos.module';
-<<<<<<< HEAD
 import { WardWatchModule } from '../modules/wardwatch/wardwatch.module';
 import { QueueModule } from '../queue/queue.module';
 import { AuthModule } from '../auth/auth.module';
@@ -24,11 +23,5 @@ import { DocumentationModule } from '../modules/documentation/documentation.modu
     MedicationsModule,
     DocumentationModule,
   ],
-=======
-import { DocumentationModule } from '../modules/documentation/documentation.module';
-
-@Module({
-  imports: [ChronosModule, DocumentationModule],
->>>>>>> origin/feature/clinical-documentation-transcription
 })
 export class AppModule {}

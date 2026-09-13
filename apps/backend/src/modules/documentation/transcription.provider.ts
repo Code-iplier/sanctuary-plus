@@ -60,7 +60,7 @@ export class GeminiTranscriptionProvider implements TranscriptionProvider {
     }
 
     const mimeType = (options.mimeType || 'audio/webm').split(';')[0].trim();
-    const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
     const duration = options.durationSeconds && options.durationSeconds > 0
       ? Math.round(options.durationSeconds)
       : Math.max(1, Math.round((cleanBase64.length * 3) / 4 / 16000));

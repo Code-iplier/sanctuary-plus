@@ -720,6 +720,12 @@ export default function DocumentationPage() {
     setIsTranscribing(true);
 
     try {
+      const maxAudioBytes = 48 * 1024 * 1024;
+      if (audioBlob.size > maxAudioBytes) {
+        throw new Error(
+          'Audio recording exceeds the 48 MB limit. Please record a shorter consultation or use a compressed audio format.',
+        );
+      }
       const base64Data = await blobToBase64(audioBlob);
 
       const response = await fetch(
@@ -738,8 +744,20 @@ export default function DocumentationPage() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        const statusMessage =
+          response.status === 404
+            ? 'Transcription endpoint unavailable'
+            : response.status === 413
+              ? 'Audio recording exceeds the server upload limit'
+              : response.status === 401 || response.status === 403
+                ? 'AI provider authentication failed'
+                : response.status === 429
+                  ? 'AI provider rate limit reached'
+                  : response.status >= 500
+                    ? 'Transcription service unavailable'
+                    : errorData.message;
         throw new Error(
-          errorData.message ||
+          statusMessage ||
             `Backend returned HTTP ${response.status} ${response.statusText}`,
         );
       }

@@ -29,7 +29,7 @@ export class GeminiExtractionProvider implements ExtractionProvider {
       );
     }
 
-    const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
     this.logger.log(
       `Dispatching clinical extraction to Gemini model [${model}] (transcript length: ${transcript.length} chars)`,
     );
