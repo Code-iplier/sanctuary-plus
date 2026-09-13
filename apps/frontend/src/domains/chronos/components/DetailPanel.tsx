@@ -9,8 +9,22 @@ function riskColor(level: string): 'danger' | 'warning' | 'accent' | 'success' {
   return 'success';
 }
 
-function SHAPList({ drivers }: { drivers: { feature_name: string; shap_value: number; current_value: number; direction: string }[] }) {
-  if (!drivers?.length) return <p className="text-xs text-slate-400">No SHAP data.</p>;
+function SHAPList({
+  drivers,
+}: {
+  drivers: {
+    feature_name: string;
+    shap_value: number;
+    current_value: number;
+    direction: string;
+  }[];
+}) {
+  if (!drivers?.length)
+    return (
+      <p className="text-xs text-slate-400">
+        Model explanation unavailable for this prediction.
+      </p>
+    );
   const maxAbs = Math.max(...drivers.map((d) => Math.abs(d.shap_value)), 0.001);
   return (
     <div className="flex flex-col gap-1.5">
@@ -19,17 +33,113 @@ function SHAPList({ drivers }: { drivers: { feature_name: string; shap_value: nu
         const pos = d.shap_value >= 0;
         return (
           <div key={i} className="flex items-center gap-2 text-xs">
-            <span className="flex-1 truncate text-slate-600">{d.feature_name.replace(/_/g, ' ')}</span>
+            <span className="flex-1 truncate text-slate-600">
+              {d.feature_name.replace(/_/g, ' ')}
+            </span>
             <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <div className={`h-full ${pos ? 'bg-cyan-600' : 'bg-red-500'}`} style={{ width: `${width}%` }} />
+              <div
+                className={`h-full ${pos ? 'bg-cyan-600' : 'bg-red-500'}`}
+                style={{ width: `${width}%` }}
+              />
             </div>
-            <span className={`font-mono text-[11px] ${pos ? 'text-cyan-700' : 'text-red-600'}`}>
-              {pos ? '+' : ''}{d.shap_value.toFixed(3)}
+            <span
+              className={`font-mono text-[11px] ${pos ? 'text-cyan-700' : 'text-red-600'}`}
+            >
+              {pos ? '+' : ''}
+              {d.shap_value.toFixed(3)}
             </span>
           </div>
         );
       })}
     </div>
+  );
+}
+
+function GroundTruthValidation({ patient }: { patient: ChronosPatient }) {
+  const truth = patient.ground_truth;
+  if (!truth) return null;
+  const rows = [
+    {
+      label: 'Septic shock',
+      prediction: patient.predictions.septic_shock.risk_probability_percentage,
+      occurred: truth.sepsis_occurred,
+    },
+    {
+      label: 'BP collapse',
+      prediction:
+        patient.predictions.blood_pressure_collapse.risk_probability_percentage,
+      occurred: truth.bp_collapse_occurred,
+    },
+    {
+      label: 'Cardiac event',
+      prediction:
+        patient.predictions.cardiac_arrest.risk_probability_percentage,
+      occurred: truth.cardiac_event_occurred,
+    },
+  ];
+  const severity = truth.max_severity ?? 'STABLE';
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-semibold text-sm text-slate-800">
+          Stream validation overlay
+        </p>
+        <Badge
+          color={
+            severity === 'CRITICAL'
+              ? 'danger'
+              : severity === 'SEVERE'
+                ? 'warning'
+                : 'default'
+          }
+          variant="soft"
+        >
+          {severity}
+        </Badge>
+      </div>
+      <p className="text-xs text-slate-500 mt-1">
+        Demo-stream labels supplied by Chronos; not a clinical outcome record.
+      </p>
+      <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-2 mt-3 text-xs">
+        <span className="text-[10px] font-bold tracking-widest text-slate-500">
+          TARGET
+        </span>
+        <span className="text-[10px] font-bold tracking-widest text-slate-500 text-right">
+          PRED.
+        </span>
+        <span className="text-[10px] font-bold tracking-widest text-slate-500 text-right">
+          LABEL
+        </span>
+        {rows.map((row) => (
+          <React.Fragment key={row.label}>
+            <span className="text-slate-700">{row.label}</span>
+            <span className="font-mono text-right">
+              {row.prediction.toFixed(1)}%
+            </span>
+            <span
+              className={`font-mono text-right font-semibold ${row.occurred ? 'text-red-600' : 'text-emerald-700'}`}
+            >
+              {row.occurred ? 'YES' : 'NO'}
+            </span>
+          </React.Fragment>
+        ))}
+      </div>
+      {truth.timeline_progress_pct != null ? (
+        <p className="text-[11px] font-mono text-slate-400 mt-3">
+          Timeline {truth.timeline_progress_pct.toFixed(1)}% ·{' '}
+          {truth.hours_remaining?.toFixed(1) ?? '—'}h remaining
+        </p>
+      ) : null}
+      {truth.events_detail?.map((item, index) => (
+        <Alert
+          key={`${item.event ?? 'event'}-${index}`}
+          color="warning"
+          className="text-xs mt-2"
+        >
+          {item.event ?? 'Stream event'}
+        </Alert>
+      ))}
+    </Card>
   );
 }
 
@@ -39,12 +149,23 @@ export function DetailPanel({ patient }: { patient: ChronosPatient | null }) {
       <Card className="p-8 text-center">
         <div className="text-2xl mb-2">🫀</div>
         <p className="font-semibold text-slate-700">No Patient Selected</p>
-        <p className="text-xs text-slate-500 mt-1">Select a patient in Triage to view prediction, SHAP, and physics details.</p>
+        <p className="text-xs text-slate-500 mt-1">
+          Select a patient in Triage to view prediction, SHAP, and physics
+          details.
+        </p>
       </Card>
     );
   }
 
-  const { patient_id, crash_probability_score, crash_risk_level, predictions, clinical_scores, last_updated, inference_errors } = patient as any;
+  const {
+    patient_id,
+    crash_probability_score,
+    crash_risk_level,
+    predictions,
+    clinical_scores,
+    last_updated,
+    inference_errors,
+  } = patient;
   const ca = predictions.cardiac_arrest;
   const metrics = ca?.physics_metrics;
 
@@ -53,25 +174,49 @@ export function DetailPanel({ patient }: { patient: ChronosPatient | null }) {
       <Card className="p-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-bold tracking-widest text-slate-500">PATIENT ID</p>
-            <p className="font-mono font-semibold text-slate-800">{patient_id}</p>
+            <p className="text-[10px] font-bold tracking-widest text-slate-500">
+              PATIENT ID
+            </p>
+            <p className="font-mono font-semibold text-slate-800">
+              {patient_id}
+            </p>
           </div>
           <Badge color={riskColor(crash_risk_level)} variant="soft">
             {crash_risk_level} · {crash_probability_score.toFixed(1)}%
           </Badge>
         </div>
-        <ProgressBar value={Math.min(crash_probability_score, 100)} maxValue={100} color={riskColor(crash_risk_level)} className="mt-3" />
-        {last_updated && <p className="text-[11px] font-mono text-slate-400 mt-1.5">Updated {new Date(last_updated).toLocaleTimeString()}</p>}
-        {inference_errors?.length ? <Alert color="warning" className="text-xs mt-2">Inference warnings: {inference_errors.join(', ')}</Alert> : null}
+        <ProgressBar
+          value={Math.min(crash_probability_score, 100)}
+          maxValue={100}
+          color={riskColor(crash_risk_level)}
+          className="mt-3"
+        />
+        {last_updated && (
+          <p className="text-[11px] font-mono text-slate-400 mt-1.5">
+            Updated {new Date(last_updated).toLocaleTimeString()}
+          </p>
+        )}
+        {inference_errors?.length ? (
+          <Alert color="warning" className="text-xs mt-2">
+            Inference warnings: {inference_errors.join(', ')}
+          </Alert>
+        ) : null}
         <div className="grid grid-cols-3 gap-2 mt-3">
           {[
             { label: 'SOFA', v: clinical_scores.sofa_score },
             { label: 'NEWS2', v: clinical_scores.news2_score },
             { label: 'Shock', v: clinical_scores.shock_index },
           ].map((s) => (
-            <div key={s.label} className="rounded-md bg-slate-50 border border-slate-200 p-2 text-center">
-              <p className="text-[9px] font-bold tracking-widest text-slate-500">{s.label}</p>
-              <p className="font-semibold text-slate-800">{Number(s.v ?? 0).toFixed(s.label === 'Shock' ? 2 : 1)}</p>
+            <div
+              key={s.label}
+              className="rounded-md bg-slate-50 border border-slate-200 p-2 text-center"
+            >
+              <p className="text-[9px] font-bold tracking-widest text-slate-500">
+                {s.label}
+              </p>
+              <p className="font-semibold text-slate-800">
+                {Number(s.v ?? 0).toFixed(s.label === 'Shock' ? 2 : 1)}
+              </p>
             </div>
           ))}
         </div>
@@ -79,7 +224,11 @@ export function DetailPanel({ patient }: { patient: ChronosPatient | null }) {
 
       {[
         { title: 'Septic Shock', emoji: '🦠', p: predictions.septic_shock },
-        { title: 'BP Collapse', emoji: '💉', p: predictions.blood_pressure_collapse },
+        {
+          title: 'BP Collapse',
+          emoji: '💉',
+          p: predictions.blood_pressure_collapse,
+        },
         { title: 'Cardiac Arrest', emoji: '🫀', p: predictions.cardiac_arrest },
       ].map(({ title, emoji, p }) => (
         <Card key={title} className="p-4">
@@ -91,38 +240,111 @@ export function DetailPanel({ patient }: { patient: ChronosPatient | null }) {
               {p.risk_probability_percentage.toFixed(1)}% · {p.risk_level}
             </Badge>
           </div>
-          <ProgressBar value={p.risk_probability_percentage} maxValue={100} color={riskColor(p.risk_level)} className="mt-2" />
+          <ProgressBar
+            value={p.risk_probability_percentage}
+            maxValue={100}
+            color={riskColor(p.risk_level)}
+            className="mt-2"
+          />
           <div className="mt-3">
-            <p className="text-[10px] font-bold tracking-widest text-slate-500 mb-1.5">SHAP DRIVERS</p>
+            <p className="text-[10px] font-bold tracking-widest text-slate-500 mb-1.5">
+              MODEL CONTRIBUTORS
+            </p>
+            <p className="text-[11px] text-slate-500 mb-2">
+              Features contributing to the current model output; these do not
+              establish causation.
+            </p>
             <SHAPList drivers={p.shap_drivers} />
           </div>
         </Card>
       ))}
 
-      {metrics && (
+      {metrics ? (
         <Card className="p-4">
-          <p className="font-semibold text-sm text-slate-800 mb-2">🔬 Physics Engine</p>
-          {ca.physics_override_triggered && ca.alert_reasons.map((r: string, i: number) => <Alert key={i} color="danger" className="text-xs mb-1">{r}</Alert>)}
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div>
+              <p className="font-semibold text-sm text-slate-800">
+                Physics safety layer
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Independent physiological safety assessment.
+              </p>
+            </div>
+            <Badge
+              color={ca.physics_override_triggered ? 'danger' : 'success'}
+              variant="soft"
+            >
+              {ca.physics_override_triggered
+                ? 'OVERRIDE ACTIVE'
+                : 'NO OVERRIDE'}
+            </Badge>
+          </div>
+          {ca.physics_override_triggered &&
+            ca.alert_reasons.map((r: string, i: number) => (
+              <Alert key={i} color="danger" className="text-xs mb-1">
+                {r}
+              </Alert>
+            ))}
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-md bg-slate-50 border p-2">
-              <p className="text-[9px] font-bold tracking-widest text-slate-500">Tissue Hypoxia</p>
-              <p className={`font-semibold ${(metrics.tissue_hypoxia_index ?? 0) > 0.65 ? 'text-red-600' : 'text-slate-800'}`}>{((metrics.tissue_hypoxia_index ?? 0) * 100).toFixed(1)}%</p>
+              <p className="text-[9px] font-bold tracking-widest text-slate-500">
+                Tissue Hypoxia
+              </p>
+              <p
+                className={`font-semibold ${metrics.tissue_hypoxia_index > 0.65 ? 'text-red-600' : 'text-slate-800'}`}
+              >
+                {metrics.tissue_hypoxia_index != null
+                  ? `${(metrics.tissue_hypoxia_index * 100).toFixed(1)}%`
+                  : '—'}
+              </p>
             </div>
             <div className="rounded-md bg-slate-50 border p-2">
-              <p className="text-[9px] font-bold tracking-widest text-slate-500">Hemodynamic Inst.</p>
-              <p className={`font-semibold ${(metrics.hemodynamic_instability_score ?? 0) > 0.65 ? 'text-red-600' : 'text-slate-800'}`}>{((metrics.hemodynamic_instability_score ?? 0) * 100).toFixed(1)}%</p>
+              <p className="text-[9px] font-bold tracking-widest text-slate-500">
+                Hemodynamic Inst.
+              </p>
+              <p
+                className={`font-semibold ${metrics.hemodynamic_instability_score > 0.65 ? 'text-red-600' : 'text-slate-800'}`}
+              >
+                {metrics.hemodynamic_instability_score != null
+                  ? `${(metrics.hemodynamic_instability_score * 100).toFixed(1)}%`
+                  : '—'}
+              </p>
             </div>
             <div className="rounded-md bg-slate-50 border p-2">
-              <p className="text-[9px] font-bold tracking-widest text-slate-500">DO₂</p>
-              <p className="font-semibold text-slate-800">{metrics.oxygen_delivery_do2 != null ? `${metrics.oxygen_delivery_do2.toFixed(0)} mL/m²/min` : '—'}</p>
+              <p className="text-[9px] font-bold tracking-widest text-slate-500">
+                DO₂
+              </p>
+              <p className="font-semibold text-slate-800">
+                {metrics.oxygen_delivery_do2 != null
+                  ? `${metrics.oxygen_delivery_do2.toFixed(0)} mL/m²/min`
+                  : '—'}
+              </p>
             </div>
             <div className="rounded-md bg-slate-50 border p-2">
-              <p className="text-[9px] font-bold tracking-widest text-slate-500">Override</p>
-              <p className={`font-bold ${ca.physics_override_triggered ? 'text-red-600' : 'text-slate-600'}`}>{ca.physics_override_triggered ? '🚨 FIRED' : 'Normal'}</p>
+              <p className="text-[9px] font-bold tracking-widest text-slate-500">
+                Safety action
+              </p>
+              <p
+                className={`font-bold ${ca.physics_override_triggered ? 'text-red-600' : 'text-emerald-700'}`}
+              >
+                {ca.physics_override_triggered
+                  ? 'Override active'
+                  : 'No override'}
+              </p>
             </div>
           </div>
         </Card>
+      ) : (
+        <Card className="p-4">
+          <p className="font-semibold text-sm text-slate-800">
+            Physics safety layer
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            Physics safety assessment unavailable for this prediction.
+          </p>
+        </Card>
       )}
+      <GroundTruthValidation patient={patient} />
     </div>
   );
 }

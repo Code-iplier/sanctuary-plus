@@ -6,15 +6,30 @@
  * Preserves Chronos websocket_connections["__triage__"] fan-out.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { ChronosPatient } from '../model/chronos.types';
-import { getChronosSummary } from '../api/chronos.client';
+import type {
+  ChronosPatient,
+  ChronosRiskPoint,
+  ChronosStreamStatus,
+} from '../model/chronos.types';
+import {
+  controlChronosStream,
+  getChronosStreamStatus,
+  getChronosSummary,
+} from '../api/chronos.client';
 
 const MAX_HISTORY = 24;
 
-export type ChronosHistoryPoint = {
-  timestamp: string;
-  crashProbability: number;
-};
+export type ChronosHistoryPoint = ChronosRiskPoint;
+export type ChronosConnectionState =
+  | 'INITIALIZING'
+  | 'CONNECTING'
+  | 'WAITING'
+  | 'LIVE'
+  | 'STALE'
+  | 'OFFLINE'
+  | 'PAUSED'
+  | 'RESTARTING'
+  | 'COMPLETE';
 
 export type UseChronosReturn = {
   patients: Record<string, ChronosPatient>;
@@ -23,6 +38,11 @@ export type UseChronosReturn = {
   selectPatient: (id: string) => void;
   connected: boolean;
   apiOnline: boolean;
+  hasCheckedHealth: boolean;
+  connectionState: ChronosConnectionState;
+  lastEventAt: string | null;
+  streamStatus: ChronosStreamStatus | null;
+  controlStream: (action: 'play' | 'pause' | 'restart') => Promise<void>;
   modelsLoaded: string[];
   predictionHistory: ChronosHistoryPoint[];
 };
@@ -32,10 +52,17 @@ export function useChronos(): UseChronosReturn {
   const [selected, setSelected] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [apiOnline, setApiOnline] = useState(false);
+  const [hasCheckedHealth, setHasCheckedHealth] = useState(false);
+  const [lastEventAt, setLastEventAt] = useState<string | null>(null);
+  const [streamStatus, setStreamStatus] = useState<ChronosStreamStatus | null>(
+    null,
+  );
   const [modelsLoaded, setModelsLoaded] = useState<string[]>([]);
-  const [predictionHistory, setPredictionHistory] = useState<ChronosHistoryPoint[]>([]);
+  const [predictionHistory, setPredictionHistory] = useState<
+    ChronosHistoryPoint[]
+  >([]);
 
-  const historyRef = useRef<Record<string, number[]>>({});
+  const historyRef = useRef<Record<string, ChronosHistoryPoint[]>>({});
   const predictionHistoryRef = useRef<ChronosHistoryPoint[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,6 +70,32 @@ export function useChronos(): UseChronosReturn {
   const selectPatient = useCallback((id: string) => {
     setSelected((prev) => (prev === id ? null : id));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const status = await getChronosStreamStatus();
+        if (!cancelled) setStreamStatus(status);
+      } catch {
+        if (!cancelled) setStreamStatus(null);
+      }
+    };
+    check();
+    const interval = setInterval(check, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const controlStream = useCallback(
+    async (action: 'play' | 'pause' | 'restart') => {
+      const status = await controlChronosStream(action);
+      setStreamStatus(status);
+    },
+    [],
+  );
 
   // Health polling — distinguishes online vs offline (not fake empty patients)
   useEffect(() => {
@@ -57,6 +110,8 @@ export function useChronos(): UseChronosReturn {
         if (cancelled) return;
         setApiOnline(false);
         setModelsLoaded([]);
+      } finally {
+        if (!cancelled) setHasCheckedHealth(true);
       }
     };
     check();
@@ -77,7 +132,9 @@ export function useChronos(): UseChronosReturn {
       if (closed) return;
       try {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(`${protocol}//${window.location.host}/ws/triage/all`);
+        const ws = new WebSocket(
+          `${protocol}//${window.location.host}/ws/triage/all`,
+        );
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -90,25 +147,33 @@ export function useChronos(): UseChronosReturn {
             const data = JSON.parse(event.data) as ChronosPatient;
             if (!data?.patient_id) return;
             const pid = data.patient_id;
-            const score = data.crash_probability_score ?? 0;
+            const score = Number(data.crash_probability_score ?? 0);
+            const ts: string =
+              data.timestamp ?? data.last_updated ?? new Date().toISOString();
             // Per-patient bounded history — preserved for sparklines
             if (!historyRef.current[pid]) historyRef.current[pid] = [];
             const hist = historyRef.current[pid];
-            hist.push(score);
+            hist.push({ timestamp: ts, crashProbability: score });
             if (hist.length > MAX_HISTORY) hist.shift();
-            (data as ChronosPatient & { _crashHistory?: number[] })._crashHistory = [...hist];
+            (data as ChronosPatient)._crashHistory = hist.map(
+              (point) => point.crashProbability,
+            );
+            (data as ChronosPatient)._riskHistory = [...hist];
 
             // Prediction event history — one point per WebSocket event (not cohort average)
             // Uses actual Chronos event timestamp; generated fallback only for malformed data
-            const ts: string =
-              (data as any).timestamp ?? (data as any).last_updated ?? new Date().toISOString();
-            const point: ChronosHistoryPoint = { timestamp: ts, crashProbability: score };
+            const point: ChronosHistoryPoint = {
+              timestamp: ts,
+              crashProbability: score,
+            };
             predictionHistoryRef.current.push(point);
-            if (predictionHistoryRef.current.length > MAX_HISTORY) predictionHistoryRef.current.shift();
+            if (predictionHistoryRef.current.length > MAX_HISTORY)
+              predictionHistoryRef.current.shift();
             const nextHistory = [...predictionHistoryRef.current];
 
             setPatients((prev) => ({ ...prev, [pid]: data }));
             setPredictionHistory(nextHistory);
+            setLastEventAt(ts);
           } catch {
             // ignore malformed
           }
@@ -146,6 +211,24 @@ export function useChronos(): UseChronosReturn {
     };
   }, [apiOnline]);
 
+  const connectionState: ChronosConnectionState = !hasCheckedHealth
+    ? 'INITIALIZING'
+    : !apiOnline
+      ? Object.keys(patients).length
+        ? 'STALE'
+        : 'OFFLINE'
+      : streamStatus?.status === 'PAUSED'
+        ? 'PAUSED'
+        : streamStatus?.status === 'RESTARTING'
+          ? 'RESTARTING'
+          : streamStatus?.status === 'COMPLETE'
+            ? 'COMPLETE'
+            : !connected
+              ? 'CONNECTING'
+              : Object.keys(patients).length
+                ? 'LIVE'
+                : 'WAITING';
+
   return {
     patients,
     selected,
@@ -153,6 +236,11 @@ export function useChronos(): UseChronosReturn {
     selectPatient,
     connected,
     apiOnline,
+    hasCheckedHealth,
+    connectionState,
+    lastEventAt,
+    streamStatus,
+    controlStream,
     modelsLoaded,
     predictionHistory,
   };

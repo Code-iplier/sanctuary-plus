@@ -133,6 +133,30 @@ Alternatively, start the containerized service from the repository root:
 docker compose up -d chronos
 ```
 
+Chronos's live replay reads only `mimic4_demo/**/icu/chartevents.csv` and,
+when available, `labevents.csv`, plus the equivalent MIMIC-III
+`CHARTEVENTS.csv`/`LABEVENTS.csv`. These datasets are local-only and ignored.
+For Docker replay, set `CHRONOS_DATA_PATH` in the repository-root `.env` to a
+directory containing `mimic4_demo/` and/or `mimic3_demo/`; Compose mounts it
+read-only at `/app/data`. Without it, the intentionally retained synthetic
+fallback is used. Do not add MIMIC or other clinical datasets to Git.
+
+### Chronos data boundaries
+
+Chronos deliberately separates three kinds of data:
+
+- **Runtime/streaming data:** MIMIC demo directories used only by
+  `data_streamer.py`. For a non-container run, set
+  `CHRONOS_DATA_DIR=<path-to-local-mimic-data>` before launching the streamer.
+  The expected root contains `mimic4_demo/` and/or `mimic3_demo/` with the CSV
+  files named above.
+- **Training data:** CinC, eICU, VitalDB, ECG, and other corpora are required
+  only to train models. They are neither needed nor loaded for normal
+  inference/replay, and must stay outside the repository.
+- **Model artifacts:** the small inference artifacts under
+  `services/chronos/models/` are intentionally versioned because FastAPI loads
+  them at startup. Training checkpoints and feature caches remain ignored.
+
 ## Authentication and access flow
 
 The repository now issues JWT access tokens through the NestJS backend while

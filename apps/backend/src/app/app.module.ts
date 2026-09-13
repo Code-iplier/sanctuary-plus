@@ -7,6 +7,7 @@ import { QueueModule } from '../queue/queue.module';
 import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../database/database.module';
 import { MedicationsModule } from '../modules/medications/medications.module';
+import { DocumentationModule } from '../modules/documentation/documentation.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { MedicationsModule } from '../modules/medications/medications.module';
     WardWatchModule,
     QueueModule,
     MedicationsModule,
+    DocumentationModule,
   ],
 })
 export class AppModule {}

@@ -1,6 +1,17 @@
-import { Controller, Get, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Param,
+} from '@nestjs/common';
 import { ChronosService } from './chronos.service';
-import type { ChronosSummary, ChronosPredictionResponse } from './chronos.types';
+import type {
+  ChronosSummary,
+  ChronosPredictionResponse,
+} from './chronos.types';
 
 @Controller('chronos')
 export class ChronosController {
@@ -11,9 +22,35 @@ export class ChronosController {
     return this.chronosService.getSummary();
   }
 
+  @Get('patients')
+  async getPatients() {
+    return this.chronosService.getPatients();
+  }
+
+  @Get('patient/:patientId/history')
+  async getPatientHistory(@Param('patientId') patientId: string) {
+    return this.chronosService.getPatientHistory(patientId);
+  }
+
+  @Get('stream/status')
+  async getStreamStatus() {
+    return this.chronosService.getStreamStatus();
+  }
+
+  @Post('stream/:action')
+  @HttpCode(HttpStatus.OK)
+  async controlStream(@Param('action') action: 'play' | 'pause' | 'restart') {
+    if (!['play', 'pause', 'restart'].includes(action)) {
+      throw new Error('Unsupported Chronos stream action');
+    }
+    return this.chronosService.controlStream(action);
+  }
+
   @Post('predict')
   @HttpCode(HttpStatus.OK)
-  async predict(@Body() payload: Record<string, unknown>): Promise<ChronosPredictionResponse> {
+  async predict(
+    @Body() payload: Record<string, unknown>,
+  ): Promise<ChronosPredictionResponse> {
     return this.chronosService.predict(payload);
   }
 }

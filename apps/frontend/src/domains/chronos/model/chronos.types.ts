@@ -58,6 +58,34 @@ export type Predictions = {
 export type RiskLevel = 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW';
 export type RiskFilter = RiskLevel | 'ALL';
 
+/** A browser-session prediction event received from Chronos WebSocket. */
+export type ChronosRiskPoint = {
+  timestamp: string;
+  crashProbability: number;
+};
+
+/** Optional validation overlay emitted only by the Chronos demo streamer. */
+export type ChronosGroundTruth = {
+  sepsis_occurred?: boolean;
+  bp_collapse_occurred?: boolean;
+  cardiac_event_occurred?: boolean;
+  max_severity?: 'STABLE' | 'MILD' | 'SEVERE' | 'CRITICAL' | string;
+  timeline_progress_pct?: number;
+  hours_remaining?: number;
+  events_detail?: Array<{ event?: string; severity?: string }>;
+};
+
+export type ChronosVitals = {
+  heart_rate?: number | null;
+  mean_arterial_pressure?: number | null;
+  systolic_bp?: number | null;
+  diastolic_bp?: number | null;
+  spo2?: number | null;
+  respiratory_rate?: number | null;
+  temperature?: number | null;
+  lactate?: number | null;
+};
+
 export type ChronosPatient = {
   patient_id: string;
   timestamp: string;
@@ -65,10 +93,12 @@ export type ChronosPatient = {
   crash_risk_level: RiskLevel;
   clinical_scores: ClinicalScores;
   predictions: Predictions;
+  current_vitals?: ChronosVitals;
   last_updated: string;
-  ground_truth?: unknown;
+  ground_truth?: ChronosGroundTruth;
   inference_errors?: string[];
   _crashHistory?: number[];
+  _riskHistory?: ChronosRiskPoint[];
 };
 
 export type ChronosHealth = {
@@ -91,4 +121,11 @@ export type ChronosSummary = {
   route?: string;
   refreshedAt?: string;
   timestamp?: string;
+};
+
+export type ChronosStreamStatus = {
+  status: 'WAITING' | 'LIVE' | 'PAUSED' | 'RESTARTING' | 'COMPLETE';
+  revision: number;
+  cohort_size: number;
+  last_event_at: string | null;
 };

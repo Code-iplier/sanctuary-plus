@@ -21,6 +21,7 @@ import json
 import httpx
 import asyncio
 import argparse
+import os
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -31,8 +32,11 @@ from loguru import logger
 # ─────────────────────────────────────────────
 # Config
 # ─────────────────────────────────────────────
-DATA_DIR   = Path(__file__).parent / "data"
-API_BASE   = "http://localhost:8000"
+# The container mounts its optional, local-only demo data at /app/data.  Keeping
+# this configurable is essential: the source datasets are deliberately ignored
+# and must never be baked into an image or hard-coded to a developer checkout.
+DATA_DIR = Path(os.getenv("CHRONOS_DATA_DIR", Path(__file__).parent / "data"))
+API_BASE = os.getenv("CHRONOS_API_BASE", "http://localhost:8000")
 
 # MIMIC item IDs for vital sign chart events
 # MIMIC-IV MetaVision IDs (220xxx) + MIMIC-III CareVue legacy IDs
@@ -139,10 +143,16 @@ def load_mimic_patients(max_patients: int = 100) -> list[dict]:
             if id_col not in chart_df.columns:
                 id_col = "subject_id"
             
-            subject_ids = chart_df["subject_id"].dropna().unique()[:max_patients]
+            subject_ids = chart_df["subject_id"].dropna().unique()
             
             for sid in subject_ids:
+                if len(patients) >= max_patients:
+                    break
                 pat_df = chart_df[chart_df["subject_id"] == sid].copy()
+                # Focus timeline on the patient's continuous ICU stay
+                if id_col in pat_df.columns and pat_df[id_col].notna().any():
+                    primary_stay = pat_df[id_col].value_counts().idxmax()
+                    pat_df = pat_df[pat_df[id_col] == primary_stay]
                 pat_df = pat_df.sort_values("charttime")
                 
                 # Pivot to wide format: one row per timestamp per vital
@@ -169,6 +179,41 @@ def load_mimic_patients(max_patients: int = 100) -> list[dict]:
                         lambda v: (v - 32) / 1.8 if (pd.notna(v) and v > 45) else v
                     )
                 
+                # Continuous monitor vitals: forward-fill along timeline up to 4-hour window.
+                # In clinical ICU practice and features.py Stage 2 semantics, continuous
+                # monitors (HR, BP, SpO2, RR, Temp) hold their display between chart events.
+                # Max carry-forward window is 4 hours (Chronos DELTA_WINDOWS max look-back).
+                # Measurements are never carried forward indefinitely across large multi-hour/multi-day gaps.
+                # Intermittent lab measurements (e.g. lactate) are NEVER forward-filled;
+                # missing lab draws remain strictly missing (null).
+                monitor_cols = [
+                    c for c in [
+                        "heart_rate", "systolic_bp", "diastolic_bp",
+                        "mean_arterial_pressure", "spo2", "respiratory_rate", "temperature"
+                    ] if c in timeline.columns
+                ]
+                if monitor_cols and "timestamp" in timeline.columns:
+                    MAX_CARRY_FORWARD_SECS = 4 * 3600
+                    for col in monitor_cols:
+                        last_val = np.nan
+                        last_time = pd.NaT
+                        new_vals = []
+                        for t, val in zip(timeline["timestamp"], timeline[col]):
+                            if pd.notna(val):
+                                last_val = val
+                                last_time = t
+                                new_vals.append(val)
+                            elif (
+                                pd.notna(last_val)
+                                and pd.notna(last_time)
+                                and pd.notna(t)
+                                and (t - last_time).total_seconds() <= MAX_CARRY_FORWARD_SECS
+                            ):
+                                new_vals.append(last_val)
+                            else:
+                                new_vals.append(np.nan)
+                        timeline[col] = new_vals
+
                 patient = {
                     "patient_id": str(int(sid)),
                     "source": mimic_name,
@@ -435,24 +480,37 @@ def compute_ground_truth(patient: dict) -> dict:
 # ─────────────────────────────────────────────
 
 def get_next_vitals(patient: dict) -> Optional[dict]:
-    """Returns the next row of vitals for a patient, cycling back to start."""
+    """Returns the next real replay row; None marks a naturally completed patient."""
     idx = patient["current_row"]
     timeline = patient["timeline"]
     
     if idx >= len(timeline):
-        patient["current_row"] = 0  # Loop back (ICU shift simulation)
-        idx = 0
+        return None
     
     row = timeline.iloc[idx]
     patient["current_row"] += 1
     
-    vitals = {"patient_id": patient["patient_id"], "timestamp": datetime.now(timezone.utc).isoformat()}
+    # Preserve source clinical timestamp from MIMIC / synthetic timeline
+    raw_ts = row.get("timestamp")
+    if pd.notna(raw_ts):
+        if isinstance(raw_ts, (pd.Timestamp, datetime)):
+            source_ts = raw_ts.isoformat()
+        else:
+            source_ts = str(raw_ts)
+    else:
+        source_ts = datetime.now(timezone.utc).isoformat()
+
+    vitals = {
+        "patient_id": patient["patient_id"],
+        "timestamp": source_ts,
+        "emission_timestamp": datetime.now(timezone.utc).isoformat(),
+    }
     
     for col in timeline.columns:
         if col == "timestamp":
             continue
         val = row.get(col, np.nan)
-        if not (isinstance(val, float) and np.isnan(val)):
+        if val is not None and pd.notna(val):
             vitals[col] = float(val) if isinstance(val, (int, float, np.integer, np.floating)) else None
     
     # R17: Include ground truth for validation overlay
@@ -464,18 +522,41 @@ def get_next_vitals(patient: dict) -> Optional[dict]:
 async def stream_patient_to_api(
     patient: dict,
     client: httpx.AsyncClient,
-    interval_seconds: float
+    interval_seconds: float,
+    control: dict,
+    initial_delay: float = 0.0,
+    semaphore: asyncio.Semaphore | None = None,
 ):
     """Continuously streams one patient's vitals to the API."""
+    if initial_delay > 0:
+        await asyncio.sleep(initial_delay)
+    generation = control["generation"]
     while True:
+        if control["paused"]:
+            await asyncio.sleep(0.25)
+            continue
         vitals = get_next_vitals(patient)
+        if vitals is None:
+            control["finished"].add(patient["patient_id"])
+            while generation == control["generation"]:
+                await asyncio.sleep(0.25)
+            generation = control["generation"]
+            continue
         if vitals:
             try:
-                resp = await client.post(
-                    f"{API_BASE}/predict",
-                    json=vitals,
-                    timeout=10.0
-                )
+                if semaphore is not None:
+                    async with semaphore:
+                        resp = await client.post(
+                            f"{API_BASE}/predict",
+                            json=vitals,
+                            timeout=10.0
+                        )
+                else:
+                    resp = await client.post(
+                        f"{API_BASE}/predict",
+                        json=vitals,
+                        timeout=10.0
+                    )
                 if resp.status_code == 200:
                     result = resp.json()
                     score = result.get("crash_probability_score", 0)
@@ -496,6 +577,34 @@ async def stream_patient_to_api(
         await asyncio.sleep(interval_seconds)
 
 
+async def watch_stream_control(client: httpx.AsyncClient, patients: list[dict], control: dict):
+    """One lightweight watcher controls all patient tasks without duplicate polling."""
+    revision = 0
+    while True:
+        try:
+            state = (await client.get(f"{API_BASE}/stream/status", timeout=5.0)).json()
+            status = state.get("status", "LIVE")
+            control["paused"] = status == "PAUSED"
+            next_revision = int(state.get("revision", 0))
+            if next_revision != revision:
+                revision = next_revision
+                for patient in patients:
+                    patient["current_row"] = 0
+                control["finished"].clear()
+                control["completion_reported"] = False
+                control["generation"] += 1
+                await client.post(f"{API_BASE}/stream/register", json={"cohort_size": len(patients)})
+            elif (
+                len(control["finished"]) == len(patients)
+                and not control["completion_reported"]
+            ):
+                control["completion_reported"] = True
+                await client.post(f"{API_BASE}/stream/complete")
+        except Exception as e:
+            logger.warning(f"Stream control unavailable: {e}")
+        await asyncio.sleep(1.0)
+
+
 async def run_streamer(patients: list[dict], interval: float):
     """Runs all patient streams concurrently."""
     logger.info(f"\n🏥 PROJECT CHRONOS STREAMER ONLINE")
@@ -511,10 +620,21 @@ async def run_streamer(patients: list[dict], interval: float):
             logger.info("   Run: uvicorn backend.api:app --host 0.0.0.0 --port 8000")
             return
         
-        # Launch all concurrent patient streams
+        await client.post(f"{API_BASE}/stream/register", json={"cohort_size": len(patients)})
+        control = {"paused": False, "finished": set(), "completion_reported": False, "generation": 0}
+        watcher = asyncio.create_task(watch_stream_control(client, patients, control))
+        # Launch all patient streams smoothly staggered across the interval with bounded concurrency
+        delay_step = interval / max(len(patients), 1)
+        sem = asyncio.Semaphore(4)
         tasks = [
-            asyncio.create_task(stream_patient_to_api(p, client, interval))
-            for p in patients
+            asyncio.create_task(
+                stream_patient_to_api(
+                    p, client, interval, control,
+                    initial_delay=i * delay_step,
+                    semaphore=sem,
+                )
+            )
+            for i, p in enumerate(patients)
         ]
         
         try:
@@ -532,7 +652,7 @@ def main():
     parser = argparse.ArgumentParser(description="Project Chronos - Patient Streamer")
     parser.add_argument("--speed",    type=float, default=5.0,
                         help="Seconds between vital updates (default: 5)")
-    parser.add_argument("--patients", type=int, default=100,
+    parser.add_argument("--patients", type=int, default=int(os.getenv("CHRONOS_MAX_PATIENTS", "100")),
                         help="Max concurrent patients (default: 100)")
     parser.add_argument("--api",      type=str, default="http://localhost:8000",
                         help="Backend API URL (default: http://localhost:8000)")
