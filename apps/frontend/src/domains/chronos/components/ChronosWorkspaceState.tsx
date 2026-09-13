@@ -30,6 +30,18 @@ const COPY: Record<
     detail:
       'The prediction service could not be reached. No clinical predictions are being received.',
   },
+  PAUSED: {
+    title: 'Replay stream paused',
+    detail: 'Patient replay stream is paused. Click Play in the header to resume.',
+  },
+  RESTARTING: {
+    title: 'Replay stream restarting',
+    detail: 'Resetting patient history and restarting the replay stream.',
+  },
+  COMPLETE: {
+    title: 'Replay stream complete',
+    detail: 'All recorded MIMIC events have been replayed. Click Restart to replay again.',
+  },
 };
 
 function Skeleton({ className }: { className: string }) {
@@ -46,7 +58,7 @@ export function ChronosWorkspaceState({
 }: {
   state: Exclude<ChronosConnectionState, 'LIVE'>;
 }) {
-  const copy = COPY[state];
+  const copy = COPY[state] ?? COPY.WAITING;
   const Icon =
     state === 'OFFLINE' || state === 'STALE'
       ? ServerCrash

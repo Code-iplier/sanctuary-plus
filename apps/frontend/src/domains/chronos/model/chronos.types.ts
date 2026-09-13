@@ -75,6 +75,17 @@ export type ChronosGroundTruth = {
   events_detail?: Array<{ event?: string; severity?: string }>;
 };
 
+export type ChronosVitals = {
+  heart_rate?: number | null;
+  mean_arterial_pressure?: number | null;
+  systolic_bp?: number | null;
+  diastolic_bp?: number | null;
+  spo2?: number | null;
+  respiratory_rate?: number | null;
+  temperature?: number | null;
+  lactate?: number | null;
+};
+
 export type ChronosPatient = {
   patient_id: string;
   timestamp: string;
@@ -82,6 +93,7 @@ export type ChronosPatient = {
   crash_risk_level: RiskLevel;
   clinical_scores: ClinicalScores;
   predictions: Predictions;
+  current_vitals?: ChronosVitals;
   last_updated: string;
   ground_truth?: ChronosGroundTruth;
   inference_errors?: string[];

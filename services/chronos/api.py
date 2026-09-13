@@ -335,6 +335,7 @@ app.add_middleware(
 class VitalsPayload(BaseModel):
     patient_id: str
     timestamp: Optional[str] = None
+    emission_timestamp: Optional[str] = None
 
     # Monitor vitals (always present — forward-fill is correct here)
     heart_rate:             Optional[float] = None
@@ -526,7 +527,11 @@ def _blend_sequential(target: str, tabular_prob: float, history_df: pd.DataFrame
         # R16-FIX-3: prepare_sequences() groups by patient_id — inject one since
         # at inference all rows belong to a single patient.
         if "patient_id" not in df_scaled.columns:
+            df_scaled = df_scaled.copy()
             df_scaled["patient_id"] = "inference_patient"
+        # Slicing df_scaled to the most recent window required for single-point sequence inference
+        if len(df_scaled) > seq_len * 2:
+            df_scaled = df_scaled.iloc[-(seq_len * 2):].copy()
         X_seq, M_seq, D_seq, _ = prepare_sequences(
             df_scaled, feat_cols, feat_cols[0], seq_len=seq_len  # target_col placeholder
         )
@@ -582,11 +587,12 @@ def _blend_sequential(target: str, tabular_prob: float, history_df: pd.DataFrame
 
 
 def _sanitize_for_json(obj):
-    """R16-FIX-2: Recursively replace NaN/Inf floats with safe defaults.
+    """Recursively replace NaN/Inf floats with None (null in JSON).
 
     json.dumps() crashes on float('nan') and float('inf') with:
         ValueError: Out of range float values are not JSON compliant
-    This walks the entire response dict and replaces them with 0.0.
+    Converting to None accurately preserves clinical missingness without
+    fabricating 0.0 measurements.
     """
     if isinstance(obj, dict):
         return {k: _sanitize_for_json(v) for k, v in obj.items()}
@@ -594,7 +600,7 @@ def _sanitize_for_json(obj):
         return [_sanitize_for_json(v) for v in obj]
     elif isinstance(obj, float):
         if math.isnan(obj) or math.isinf(obj):
-            return 0.0
+            return None
         return obj
     return obj
 
@@ -695,6 +701,16 @@ def build_response(
                 "alert_reasons": physics.alert_reasons,
             }
         },
+        "current_vitals": {
+            "heart_rate": round(float(current_vitals["heart_rate"]), 1) if current_vitals.get("heart_rate") is not None and not pd.isna(current_vitals.get("heart_rate")) else None,
+            "mean_arterial_pressure": round(float(current_vitals["mean_arterial_pressure"]), 1) if current_vitals.get("mean_arterial_pressure") is not None and not pd.isna(current_vitals.get("mean_arterial_pressure")) else None,
+            "systolic_bp": round(float(current_vitals["systolic_bp"]), 1) if current_vitals.get("systolic_bp") is not None and not pd.isna(current_vitals.get("systolic_bp")) else None,
+            "diastolic_bp": round(float(current_vitals["diastolic_bp"]), 1) if current_vitals.get("diastolic_bp") is not None and not pd.isna(current_vitals.get("diastolic_bp")) else None,
+            "spo2": round(float(current_vitals["spo2"]), 1) if current_vitals.get("spo2") is not None and not pd.isna(current_vitals.get("spo2")) else None,
+            "respiratory_rate": round(float(current_vitals["respiratory_rate"]), 1) if current_vitals.get("respiratory_rate") is not None and not pd.isna(current_vitals.get("respiratory_rate")) else None,
+            "temperature": round(float(current_vitals["temperature"]), 1) if current_vitals.get("temperature") is not None and not pd.isna(current_vitals.get("temperature")) else None,
+            "lactate": round(float(current_vitals["lactate"]), 2) if current_vitals.get("lactate") is not None and not pd.isna(current_vitals.get("lactate")) else None,
+        },
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -741,6 +757,7 @@ async def pause_stream():
 
 @app.post("/stream/restart")
 async def restart_stream():
+    patient_history.clear()
     stream_control["status"] = "RESTARTING"
     stream_control["revision"] += 1
     return stream_control
@@ -767,9 +784,10 @@ async def predict(payload: VitalsPayload, background_tasks: BackgroundTasks):
     Main prediction endpoint.
     Called every N seconds by data_streamer.py for each active patient.
     """
+    await asyncio.sleep(0)
     pid = payload.patient_id
     ts  = payload.timestamp or datetime.now(timezone.utc).isoformat()
-    stream_control["last_event_at"] = ts
+    stream_control["last_event_at"] = payload.emission_timestamp or datetime.now(timezone.utc).isoformat()
     
     # ── 1. Update rolling patient history ─────────────────────────────────
     vitals_dict = payload.model_dump()
@@ -793,7 +811,7 @@ async def predict(payload: VitalsPayload, background_tasks: BackgroundTasks):
     # use df.shift(N) where N rows = N hours. If the streamer sends data every
     # 5 minutes, shift(4) looks 4 rows back = 20 min, NOT 4 hours.
     # This mismatch made all 75 delta features systematically wrong at inference.
-    if "timestamp" in history_df.columns:
+    if "timestamp" in history_df.columns and len(history_df) > 1:
         history_df = (
             history_df
             .set_index("timestamp")
@@ -801,6 +819,8 @@ async def predict(payload: VitalsPayload, background_tasks: BackgroundTasks):
             .mean(numeric_only=True)
             .reset_index()
         )
+        if len(history_df) > MAX_HISTORY_ROWS:
+            history_df = history_df.iloc[-MAX_HISTORY_ROWS:].reset_index(drop=True)
     history_df = engineer_features(history_df)    # Adds SOFA, NEWS2, deltas, missingness flags, etc.
     
     # Get current row (last observation) as feature vector
@@ -863,8 +883,11 @@ async def predict(payload: VitalsPayload, background_tasks: BackgroundTasks):
     # GRU-D and TCN were trained and saved but never called during /predict.
     # Blends calibrated tabular with raw sequential using adaptive weights,
     # exactly matching the train_target() final blend used during evaluation.
+    await asyncio.sleep(0)
     ca_prob = _blend_sequential("hemodynamic_collapse", ca_prob_tab, history_df, all_features)
+    await asyncio.sleep(0)
     sep_prob = _blend_sequential("sepsis",              sepsis_prob, history_df, all_features)
+    await asyncio.sleep(0)
     hyp_prob = _blend_sequential("hypotension",         bp_prob,     history_df, all_features)
 
     # ── 5. Physics Engine (biological safety net) ──────────────────────────
@@ -872,12 +895,42 @@ async def predict(payload: VitalsPayload, background_tasks: BackgroundTasks):
     physics_output: PhysicsEngineOutput = run_physics_engine(vitals_for_physics)
 
     # ── 6. Assemble & return JSON response ─────────────────────────────────
+    # Resolve current vitals: continuous monitors hold their last valid observation
+    # within a 4-hour window (Chronos DELTA_WINDOWS max look-back; telemetry gaps > 4h
+    # indicate disconnected sensors or off-unit transport).
+    # Intermittent lab measurements (e.g. lactate) MUST remain strictly missing (None)
+    # when not drawn on the current event.
+    curr_dt = pd.to_datetime(ts)
+    resolved_vitals = {}
+    for vk in [
+        "heart_rate", "mean_arterial_pressure", "systolic_bp", "diastolic_bp",
+        "spo2", "respiratory_rate", "temperature"
+    ]:
+        val = vitals_dict.get(vk)
+        if val is None or (isinstance(val, float) and math.isnan(val)) or pd.isna(val):
+            val = None
+            for past_ev in reversed(patient_history[pid]):
+                past_val = past_ev.get(vk)
+                if past_val is not None and not (isinstance(past_val, float) and math.isnan(past_val)) and not pd.isna(past_val):
+                    past_dt = pd.to_datetime(past_ev.get("timestamp"))
+                    # 4-hour maximum carry-forward window
+                    if pd.notna(past_dt) and pd.notna(curr_dt) and (curr_dt - past_dt).total_seconds() <= 4 * 3600:
+                        val = past_val
+                    break
+        resolved_vitals[vk] = val
+
+    # For lactate: missing remains strictly missing (None)
+    lac = vitals_dict.get("lactate")
+    if lac is None or (isinstance(lac, float) and math.isnan(lac)) or pd.isna(lac):
+        lac = None
+    resolved_vitals["lactate"] = lac
+
     response = build_response(
         pid, ts,
         sep_prob, sepsis_drivers,
         hyp_prob, bp_drivers,
         ca_prob,  ca_drivers,
-        physics_output, vitals_dict,
+        physics_output, resolved_vitals,
         sofa_score, news2_score, shock_index,
     )
 
@@ -924,11 +977,15 @@ async def websocket_endpoint(websocket: WebSocket, patient_id: str):
     try:
         while True:
             await websocket.receive_text()  # Keep connection alive
-    except WebSocketDisconnect:
-        websocket_connections[patient_id].remove(websocket)
-        if not websocket_connections[patient_id]:
-            del websocket_connections[patient_id]
-        logger.info(f"WebSocket disconnected for patient {patient_id}")
+    except (WebSocketDisconnect, Exception) as e:
+        logger.info(f"WebSocket closed for patient {patient_id}: {type(e).__name__}")
+    finally:
+        try:
+            websocket_connections[patient_id].remove(websocket)
+        except (ValueError, KeyError):
+            pass
+        if not websocket_connections.get(patient_id):
+            websocket_connections.pop(patient_id, None)
 
 
 @app.websocket("/ws/triage/all")
@@ -943,13 +1000,16 @@ async def triage_websocket(websocket: WebSocket):
     
     try:
         while True:
-            await asyncio.sleep(1)  # Keeps the connection alive
-    except WebSocketDisconnect:
-        if websocket in websocket_connections["__triage__"]:
+            await websocket.receive_text()  # Process protocol frames and detect client disconnect
+    except (WebSocketDisconnect, Exception) as e:
+        logger.info(f"Triage Radar WebSocket closed: {type(e).__name__}")
+    finally:
+        try:
             websocket_connections["__triage__"].remove(websocket)
-        if not websocket_connections["__triage__"]:
-            del websocket_connections["__triage__"]
-        logger.info("Triage Radar WebSocket disconnected.")
+        except (ValueError, KeyError):
+            pass
+        if not websocket_connections.get("__triage__"):
+            websocket_connections.pop("__triage__", None)
 
 
 async def push_to_websocket(patient_id: str, data: dict):
@@ -957,33 +1017,39 @@ async def push_to_websocket(patient_id: str, data: dict):
 
     Bug 37 fix: Both send paths are always attempted independently.
     BUG-CLAUDE-4-1/4-2 fix: Iterates over ALL connections per key (multi-tab support).
-    Stale/closed connections are silently removed from the list.
+    Stale/closed connections are silently removed from the list safely.
     """
     # Send to patient-specific WebSocket(s) (if the patient's detail view is open)
     if patient_id in websocket_connections:
         dead = []
-        for ws in list(websocket_connections[patient_id]):
+        for ws in list(websocket_connections.get(patient_id, [])):
             try:
                 await ws.send_json(data)
             except Exception:
                 dead.append(ws)
         for ws in dead:
-            websocket_connections[patient_id].remove(ws)
-        if not websocket_connections[patient_id]:
-            del websocket_connections[patient_id]
+            try:
+                websocket_connections[patient_id].remove(ws)
+            except (ValueError, KeyError):
+                pass
+        if not websocket_connections.get(patient_id):
+            websocket_connections.pop(patient_id, None)
 
     # ALWAYS also send to ALL triage dashboard connections (global view)
     if "__triage__" in websocket_connections:
         dead = []
-        for ws in list(websocket_connections["__triage__"]):
+        for ws in list(websocket_connections.get("__triage__", [])):
             try:
                 await ws.send_json(data)
             except Exception:
                 dead.append(ws)
         for ws in dead:
-            websocket_connections["__triage__"].remove(ws)
-        if not websocket_connections["__triage__"]:
-            del websocket_connections["__triage__"]
+            try:
+                websocket_connections["__triage__"].remove(ws)
+            except (ValueError, KeyError):
+                pass
+        if not websocket_connections.get("__triage__"):
+            websocket_connections.pop("__triage__", None)
 
 
 @app.get("/patient/{patient_id}/history")
@@ -992,9 +1058,16 @@ async def get_patient_history(patient_id: str):
     if patient_id not in patient_history:
         raise HTTPException(status_code=404, detail=f"Patient {patient_id} not found.")
     
-    history = list(patient_history[patient_id])
+    raw_history = list(patient_history[patient_id])[-24:]
+    sanitized = []
+    for entry in raw_history:
+        item = dict(entry)
+        if "timestamp" in item and hasattr(item["timestamp"], "isoformat"):
+            item["timestamp"] = item["timestamp"].isoformat()
+        sanitized.append(_sanitize_for_json(item))
+
     return {
         "patient_id": patient_id,
-        "n_rows":     len(history),
-        "history":    history[-24:],  # Return last 24 readings for charting
+        "n_rows":     len(patient_history[patient_id]),
+        "history":    sanitized,
     }
