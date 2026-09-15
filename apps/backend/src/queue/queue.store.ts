@@ -87,101 +87,27 @@ export class QueueStore {
   };
 
   private tickets: PatientTicket[] = [
-    {
-      id: 'tkt-01',
-      tokenNumber: 'GEN-101',
-      patientId: 'PAT-000101',
-      patientName: 'Ananya Sharma',
-      patientPhone: '9000011111',
-      departmentId: 'dept-gm',
-      departmentName: 'General Medicine',
-      visitType: 'NEW',
-      reason: 'Persistent fever and fatigue for 3 days',
-      triageLevel: 'NORMAL',
-      status: 'WAITING',
-      createdAt: new Date(Date.now() - 45 * 60000).toISOString(),
-      triagedAt: new Date(Date.now() - 40 * 60000).toISOString(),
-    },
-    {
-      id: 'tkt-02',
-      tokenNumber: 'GEN-102',
-      patientId: 'PAT-000102',
-      patientName: 'Rohan Patel',
-      patientPhone: '9000022222',
-      departmentId: 'dept-gm',
-      departmentName: 'General Medicine',
-      visitType: 'NEW',
-      reason: 'Chest tightness and shortness of breath',
-      triageLevel: 'URGENT',
-      status: 'WAITING',
-      createdAt: new Date(Date.now() - 30 * 60000).toISOString(),
-      triagedAt: new Date(Date.now() - 25 * 60000).toISOString(),
-      vitals: { bp: '142/90', pulse: '98', temp: '98.6', spo2: '96' },
-      triageNotes: 'Priority escalated due to vitals',
-    },
-    {
-      id: 'tkt-03',
-      tokenNumber: 'CARD-201',
-      patientId: 'PAT-000103',
-      patientName: 'Neha Das',
-      patientPhone: '9000033333',
-      departmentId: 'dept-card',
-      departmentName: 'Cardiology',
-      visitType: 'FOLLOW_UP',
-      reason: 'Post-angioplasty routine review',
-      triageLevel: 'FOLLOW_UP',
-      status: 'CALLED',
-      assignedDoctorId: 'doc-03',
-      assignedDoctorName: 'Dr. Vikram Malhotra',
-      assignedRoomId: 'room-card-01',
-      assignedRoomNumber: 'CARD-01',
-      createdAt: new Date(Date.now() - 60 * 60000).toISOString(),
-      triagedAt: new Date(Date.now() - 50 * 60000).toISOString(),
-      calledAt: new Date(Date.now() - 2 * 60000).toISOString(),
-    },
-    {
-      id: 'tkt-04',
-      tokenNumber: 'PED-401',
-      patientId: 'PAT-000104',
-      patientName: 'Imran Ali (Child: Zaid)',
-      patientPhone: '9000044444',
-      departmentId: 'dept-ped',
-      departmentName: 'Pediatrics',
-      visitType: 'NEW',
-      reason: 'Viral rash and dry cough',
-      triageLevel: 'NORMAL',
-      status: 'WAITING',
-      createdAt: new Date(Date.now() - 20 * 60000).toISOString(),
-      triagedAt: new Date(Date.now() - 15 * 60000).toISOString(),
-    },
-    {
-      id: 'tkt-05',
-      tokenNumber: 'GEN-100',
-      patientId: 'PAT-000105',
-      patientName: 'Priya Nambiar',
-      patientPhone: '9000055555',
-      departmentId: 'dept-gm',
-      departmentName: 'General Medicine',
-      visitType: 'REVIEW',
-      reason: 'Blood test reports review',
-      triageLevel: 'NORMAL',
-      status: 'COMPLETED',
-      assignedDoctorId: 'doc-01',
-      assignedDoctorName: 'Dr. Sunita Rao',
-      assignedRoomId: 'room-gm-01',
-      assignedRoomNumber: 'GM-01',
-      createdAt: new Date(Date.now() - 90 * 60000).toISOString(),
-      triagedAt: new Date(Date.now() - 85 * 60000).toISOString(),
-      calledAt: new Date(Date.now() - 35 * 60000).toISOString(),
-      consultationStartedAt: new Date(Date.now() - 30 * 60000).toISOString(),
-      consultationCompletedAt: new Date(Date.now() - 15 * 60000).toISOString(),
-    },
+    { id: 'TKT-SYN-0001', encounterId: 'ENC-SYN-0001-OPD-20260915', tokenNumber: 'GEN-101', patientId: 'PAT-SYN-0001', patientName: 'Ananya Sharma', patientPhone: '9000011111', departmentId: 'dept-gm', departmentName: 'General Medicine', visitType: 'NEW', reason: 'Persistent fever, dry cough and body ache for 3 days', triageLevel: 'NORMAL', status: 'WAITING', createdAt: new Date(Date.now() - 45 * 60000).toISOString(), triagedAt: new Date(Date.now() - 40 * 60000).toISOString(), triageScore: 32 },
+    { id: 'TKT-SYN-0002', encounterId: 'ENC-SYN-0002-OPD-20260915', tokenNumber: 'CARD-201', patientId: 'PAT-SYN-0002', patientName: 'Rohan Patel', patientPhone: '9000022222', departmentId: 'dept-card', departmentName: 'Cardiology', visitType: 'NEW', reason: 'Exertional chest pressure radiating to the arm and jaw', triageLevel: 'URGENT', status: 'WAITING', createdAt: new Date(Date.now() - 30 * 60000).toISOString(), triagedAt: new Date(Date.now() - 25 * 60000).toISOString(), vitals: { bp: '168/96', pulse: '108', temp: '98.6', spo2: '95' }, triageNotes: 'Immediate clinician assessment required', triageScore: 100 },
+    { id: 'TKT-SYN-0003', encounterId: 'ENC-SYN-0003-OPD-20260915', tokenNumber: 'CARD-202', patientId: 'PAT-SYN-0003', patientName: 'Neha Das', patientPhone: '9000033333', departmentId: 'dept-card', departmentName: 'Cardiology', visitType: 'FOLLOW_UP', reason: 'Post-angioplasty follow-up with mild stable exertional fatigue', triageLevel: 'FOLLOW_UP', status: 'WAITING', assignedDoctorId: 'doc-03', assignedDoctorName: 'Dr. Vikram Malhotra', assignedRoomId: 'room-card-01', assignedRoomNumber: 'CARD-01', createdAt: new Date(Date.now() - 60 * 60000).toISOString(), triagedAt: new Date(Date.now() - 50 * 60000).toISOString(), triageScore: 26 },
+    { id: 'TKT-SYN-0004', encounterId: 'ENC-SYN-0004-OPD-20260915', tokenNumber: 'PED-401', patientId: 'PAT-SYN-0004', patientName: 'Zaid Ali', patientPhone: '9000044444', departmentId: 'dept-ped', departmentName: 'Pediatrics', visitType: 'NEW', reason: 'Fever, dry cough and new rash for 2 days', triageLevel: 'NORMAL', status: 'WAITING', createdAt: new Date(Date.now() - 20 * 60000).toISOString(), triagedAt: new Date(Date.now() - 15 * 60000).toISOString(), triageScore: 36 },
+    { id: 'TKT-SYN-0005', encounterId: 'ENC-SYN-0005-OPD-20260915', tokenNumber: 'GEN-107', patientId: 'PAT-SYN-0005', patientName: 'Priya Nambiar', patientPhone: '9000055555', departmentId: 'dept-gm', departmentName: 'General Medicine', visitType: 'REVIEW', reason: 'Fatigue, cold intolerance and recent weight gain', triageLevel: 'NORMAL', status: 'WAITING', createdAt: new Date(Date.now() - 90 * 60000).toISOString(), triagedAt: new Date(Date.now() - 85 * 60000).toISOString(), triageScore: 29 },
+    { id: 'TKT-SYN-0006', encounterId: 'ENC-SYN-0006-OPD-20260915', tokenNumber: 'GEN-108', patientId: 'PAT-SYN-0006', patientName: 'Suresh Kumar', patientPhone: '9000066666', departmentId: 'dept-gm', departmentName: 'General Medicine', visitType: 'NEW', reason: 'Severe worsening breathlessness with wheeze and productive cough', triageLevel: 'URGENT', status: 'WAITING', createdAt: new Date(Date.now() - 24 * 60000).toISOString(), triagedAt: new Date(Date.now() - 20 * 60000).toISOString(), vitals: { bp: '148/86', pulse: '112', temp: '98.6', spo2: '88' }, triageNotes: 'Immediate respiratory assessment required', triageScore: 99 },
+    { id: 'TKT-SYN-0007', encounterId: 'ENC-SYN-0007-OPD-20260915', tokenNumber: 'DERM-501', patientId: 'PAT-SYN-0007', patientName: 'Ayesha Khan', patientPhone: '9000077777', departmentId: 'dept-derm', departmentName: 'Dermatology', visitType: 'NEW', reason: 'Generalized itchy hives after shrimp exposure', triageLevel: 'NORMAL', status: 'WAITING', createdAt: new Date(Date.now() - 18 * 60000).toISOString(), triagedAt: new Date(Date.now() - 14 * 60000).toISOString(), triageScore: 48 },
+    { id: 'TKT-SYN-0008', encounterId: 'ENC-SYN-0008-OPD-20260915', tokenNumber: 'ORTH-301', patientId: 'PAT-SYN-0008', patientName: 'Arjun Menon', patientPhone: '9000088888', departmentId: 'dept-orth', departmentName: 'Orthopedics', visitType: 'NEW', reason: 'Right knee pain for 6 months, worse on stairs', triageLevel: 'NORMAL', status: 'WAITING', createdAt: new Date(Date.now() - 16 * 60000).toISOString(), triagedAt: new Date(Date.now() - 12 * 60000).toISOString(), triageScore: 24 },
+    { id: 'TKT-SYN-0009', encounterId: 'ENC-SYN-0009-OPD-20260915', tokenNumber: 'DERM-502', patientId: 'PAT-SYN-0009', patientName: 'Meera Joshi', patientPhone: '9000099999', departmentId: 'dept-derm', departmentName: 'Dermatology', visitType: 'NEW', reason: 'Inflammatory facial acne for 8 months', triageLevel: 'NORMAL', status: 'WAITING', createdAt: new Date(Date.now() - 14 * 60000).toISOString(), triagedAt: new Date(Date.now() - 10 * 60000).toISOString(), triageScore: 21 },
+    { id: 'TKT-SYN-0010', encounterId: 'ENC-SYN-0010-OPD-20260915', tokenNumber: 'GEN-109', patientId: 'PAT-SYN-0010', patientName: 'Rajiv Bose', patientPhone: '9000001112', departmentId: 'dept-gm', departmentName: 'General Medicine', visitType: 'REVIEW', reason: 'Worsening leg swelling, reduced urine and orthopnea', triageLevel: 'URGENT', status: 'WAITING', createdAt: new Date(Date.now() - 12 * 60000).toISOString(), triagedAt: new Date(Date.now() - 8 * 60000).toISOString(), vitals: { bp: '154/92', pulse: '88', temp: '98.6', spo2: '94' }, triageNotes: 'Prompt renal and fluid-status assessment required', triageScore: 86 },
+    { id: 'TKT-SYN-0011', encounterId: 'ENC-SYN-0011-OPD-20260915', tokenNumber: 'ORTH-302', patientId: 'PAT-SYN-0011', patientName: 'Lakshmi Devi', patientPhone: '9000002223', departmentId: 'dept-orth', departmentName: 'Orthopedics', visitType: 'FOLLOW_UP', reason: 'Chronic lower-back and bilateral knee pain', triageLevel: 'FOLLOW_UP', status: 'WAITING', createdAt: new Date(Date.now() - 10 * 60000).toISOString(), triagedAt: new Date(Date.now() - 7 * 60000).toISOString(), triageScore: 23 },
+    { id: 'TKT-SYN-0012', encounterId: 'ENC-SYN-0012-OPD-20260915', tokenNumber: 'ORTH-303', patientId: 'PAT-SYN-0012', patientName: 'Nitin Verma', patientPhone: '9000003334', departmentId: 'dept-orth', departmentName: 'Orthopedics', visitType: 'NEW', reason: 'Acute low-back pain radiating to posterior thigh after lifting', triageLevel: 'NORMAL', status: 'WAITING', createdAt: new Date(Date.now() - 8 * 60000).toISOString(), triagedAt: new Date(Date.now() - 5 * 60000).toISOString(), triageScore: 40 },
+    { id: 'TKT-SYN-0013', encounterId: 'ENC-SYN-0013-OPD-20260915', tokenNumber: 'GEN-110', patientId: 'PAT-SYN-0013', patientName: 'Farah Begum', patientPhone: '9000004445', departmentId: 'dept-gm', departmentName: 'General Medicine', visitType: 'NEW', reason: 'Right upper abdominal pain after oily food with nausea', triageLevel: 'NORMAL', status: 'WAITING', createdAt: new Date(Date.now() - 6 * 60000).toISOString(), triagedAt: new Date(Date.now() - 4 * 60000).toISOString(), triageScore: 58 },
+    { id: 'TKT-SYN-0014', encounterId: 'ENC-SYN-0014-OPD-20260915', tokenNumber: 'PED-402', patientId: 'PAT-SYN-0014', patientName: 'Devika Rao', patientPhone: '9000005556', departmentId: 'dept-ped', departmentName: 'Pediatrics', visitType: 'NEW', reason: 'Rapidly worsening wheeze and breathlessness', triageLevel: 'URGENT', status: 'WAITING', createdAt: new Date(Date.now() - 4 * 60000).toISOString(), triagedAt: new Date(Date.now() - 3 * 60000).toISOString(), vitals: { bp: '—', pulse: '132', temp: '98.8', spo2: '90' }, triageNotes: 'Immediate paediatric respiratory assessment required', triageScore: 100 },
+    { id: 'TKT-SYN-0015', encounterId: 'ENC-SYN-0015-OPD-20260915', tokenNumber: 'GEN-111', patientId: 'PAT-SYN-0015', patientName: 'Harpreet Singh', patientPhone: '9000006667', departmentId: 'dept-gm', departmentName: 'General Medicine', visitType: 'FOLLOW_UP', reason: 'Four weeks of elevated home blood-pressure readings', triageLevel: 'FOLLOW_UP', status: 'WAITING', createdAt: new Date(Date.now() - 2 * 60000).toISOString(), triagedAt: new Date(Date.now() - 1 * 60000).toISOString(), triageScore: 27 },
   ];
 
   private events: QueueEvent[] = [
     {
       id: 'ev-01',
-      ticketId: 'tkt-05',
+      ticketId: 'TKT-SYN-0005',
       eventType: 'CONSULTATION_COMPLETED',
       actor: 'Dr. Sunita Rao',
       detail: 'Consultation finished in Room GM-01 for Priya Nambiar',
@@ -189,7 +115,7 @@ export class QueueStore {
     },
     {
       id: 'ev-02',
-      ticketId: 'tkt-03',
+      ticketId: 'TKT-SYN-0003',
       eventType: 'PATIENT_CALLED',
       actor: 'Dr. Vikram Malhotra',
       detail: 'Called Token CARD-201 to Room CARD-01',
@@ -198,16 +124,31 @@ export class QueueStore {
   ];
 
   private tokenSequences: Record<string, number> = {
-    GEN: 103,
-    CARD: 202,
-    ORTH: 301,
+    GEN: 111,
+    CARD: 203,
+    ORTH: 303,
     PED: 402,
-    DERM: 501,
+    DERM: 504,
   };
 
   private lock = false;
 
   constructor() {
+    this.recalculate();
+  }
+
+  /** Merge durable tickets into the in-memory operational queue after startup. */
+  public hydrateTickets(tickets: PatientTicket[]): void {
+    const durableIds = new Set(tickets.map((ticket) => ticket.id));
+    this.tickets = this.tickets.filter((ticket) => !durableIds.has(ticket.id));
+    this.tickets.push(...tickets);
+    for (const ticket of tickets) {
+      const [code, sequence] = ticket.tokenNumber.split('-');
+      const parsedSequence = Number(sequence);
+      if (code && Number.isInteger(parsedSequence)) {
+        this.tokenSequences[code] = Math.max(this.tokenSequences[code] ?? 0, parsedSequence);
+      }
+    }
     this.recalculate();
   }
 
@@ -243,6 +184,8 @@ export class QueueStore {
       deptWaiting.sort((a, b) => {
         const pDiff = (priorityWeight[b.triageLevel] ?? 0) - (priorityWeight[a.triageLevel] ?? 0);
         if (pDiff !== 0) return pDiff;
+        const urgencyDiff = (b.triageScore ?? 0) - (a.triageScore ?? 0);
+        if (urgencyDiff !== 0) return urgencyDiff;
         return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       });
 
@@ -365,13 +308,30 @@ export class QueueStore {
     return newTicket;
   }
 
+  public attachEncounterId(ticketId: string, encounterId: string): PatientTicket {
+    const ticket = this.tickets.find((candidate) => candidate.id === ticketId);
+    if (!ticket) throw new Error('Ticket not found');
+    ticket.encounterId = encounterId;
+    return ticket;
+  }
+
+  public removeTicket(ticketId: string): void {
+    this.tickets = this.tickets.filter((ticket) => ticket.id !== ticketId);
+    this.recalculate();
+  }
+
+  public getTicketByEncounterId(encounterId: string): PatientTicket | undefined {
+    return this.tickets.find((ticket) => ticket.encounterId === encounterId);
+  }
+
   // TRIAGE TICKET (Reception / Triage Nurse)
   public triageTicket(
     ticketId: string,
     triageLevel: TriageLevel,
     vitals?: { bp?: string; pulse?: string; temp?: string; spo2?: string },
     triageNotes?: string,
-    actor = 'Triage Staff'
+    actor = 'Triage Staff',
+    priorityScore?: number,
   ): PatientTicket {
     const ticket = this.tickets.find((t) => t.id === ticketId);
     if (!ticket) throw new Error('Ticket not found');
@@ -379,6 +339,7 @@ export class QueueStore {
     ticket.triageLevel = triageLevel;
     ticket.vitals = vitals;
     ticket.triageNotes = triageNotes;
+    ticket.triageScore = priorityScore;
     ticket.status = 'WAITING';
     ticket.triagedAt = new Date().toISOString();
 

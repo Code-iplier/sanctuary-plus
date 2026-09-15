@@ -35,8 +35,10 @@ const STAFF_ROSTER = [
 
 const DEMO_PATIENTS = [
   { name: 'Ananya Sharma', phone: '9000011111', note: 'Token A-21 (Waiting)' },
-  { name: 'Imran Ali', phone: '9000044444', note: 'Token A-24 (In Consult)' },
-  { name: 'Priya Nambiar', phone: '9000055555', note: 'No Active Token' },
+  { name: 'Zaid Ali', phone: '9000044444', note: 'Pediatrics · Waiting' },
+  { name: 'Rohan Patel', phone: '9000022222', note: 'Cardiology · Priority' },
+  { name: 'Devika Rao', phone: '9000005556', note: 'Pediatrics · Priority' },
+  { name: 'Priya Nambiar', phone: '9000055555', note: 'General Medicine · Waiting' },
 ] as const;
 
 export default function AuthPage({ onAuthenticated }: AuthPageProps) {
@@ -97,12 +99,13 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
         patientId: patient.id,
         phone: patient.phone,
         name: patient.name,
-      }).catch(() => null);
+      });
       onAuthenticated({
         role: 'patient',
         patientId: patient.id,
         phone: patient.phone,
         name: patient.name,
+        abhaId: patient.abhaId,
         accessToken: auth?.accessToken,
       });
     } catch {
@@ -131,18 +134,19 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
         phone,
         age: regAge.trim() || '30',
         gender: regGender,
-        hospitalId: regHospitalId,
+        facilityId: regHospitalId,
       });
       const auth = await loginPatient({
         patientId: patient.id,
         phone: patient.phone,
         name: patient.name,
-      }).catch(() => null);
+      });
       onAuthenticated({
         role: 'patient',
         patientId: patient.id,
         phone: patient.phone,
         name: patient.name,
+        abhaId: patient.abhaId,
         accessToken: auth?.accessToken,
       });
     } catch {
@@ -163,7 +167,7 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
     setLoading(true);
     setError(null);
     try {
-      const auth = await loginStaff(username, password).catch(() => null);
+      const auth = await loginStaff(username, password);
       onAuthenticated({
         role: 'staff',
         staffName: staff.name,
@@ -171,6 +175,8 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
         roleTitle: staff.roleTitle,
         accessToken: auth?.accessToken,
       });
+    } catch {
+      setError('Unable to connect to the hospital service. Please try again.');
     } finally {
       setLoading(false);
     }

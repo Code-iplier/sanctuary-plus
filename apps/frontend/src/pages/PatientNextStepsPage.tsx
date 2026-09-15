@@ -1,0 +1,10 @@
+import { useEffect, useState } from 'react';
+import { ArrowRight, CalendarClock, MapPin } from 'lucide-react';
+import { getPatientNextSteps } from '../medikiosk/api';
+import type { Session } from '../queue/types';
+
+export default function PatientNextStepsPage({ session }: { session: Extract<Session, { role: 'patient' }> }) {
+  const [items, setItems] = useState<any[]>([]);
+  useEffect(() => { void getPatientNextSteps(session.accessToken ?? '', session.patientId).then(setItems).catch(() => setItems([])); }, [session.accessToken, session.patientId]);
+  return <section className="max-w-3xl mx-auto space-y-4"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">After consultation</p><h2 className="text-2xl font-bold text-slate-900">Next Steps</h2><p className="mt-1 text-sm text-slate-500">Follow only the instructions finalized by your clinician.</p></div>{items.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No finalized next steps yet.</div> : items.map((item) => <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><span className="rounded-full bg-teal-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-teal-700">{item.type}</span><h3 className="mt-3 text-lg font-bold text-slate-900">{item.title}</h3></div><ArrowRight className="h-5 w-5 text-teal-600" /></div>{item.destinationName && <p className="mt-3 flex items-center gap-2 text-sm text-slate-700"><MapPin className="h-4 w-4 text-slate-400" />{item.destinationName}{item.destinationRoom ? ` · ${item.destinationRoom}` : ''}</p>}{item.timing && <p className="mt-2 flex items-center gap-2 text-sm text-slate-700"><CalendarClock className="h-4 w-4 text-slate-400" />{item.timing}</p>}{item.preparation && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900"><strong>Preparation:</strong> {item.preparation}</p>}{item.instructions && <p className="mt-3 text-sm text-slate-600">{item.instructions}</p>}</article>)}</section>;
+}

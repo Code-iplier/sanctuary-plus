@@ -6,9 +6,9 @@ services:
       POSTGRES_USER: sanctuary
       POSTGRES_PASSWORD: sanctuary_dev
     ports:
-      - '5433:5432'
+      - '${SANCTUARY_POSTGRES_PORT:-5434}:5432'
     volumes:
-      - sanctuary-postgres:/var/lib/postgresql/data
+      - sanctuary-plus-postgres:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U sanctuary -d sanctuary']
       interval: 5s
@@ -56,6 +56,16 @@ services:
       CHRONOS_BASE_URL: http://chronos:8000
       DATABASE_URL: postgresql://sanctuary:sanctuary_dev@postgres:5432/sanctuary
       JWT_SECRET: ${JWT_SECRET:-sanctuary-development-secret-change-me}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_LIVE_MODEL: ${GEMINI_LIVE_MODEL:-gemini-3.1-flash-live-preview}
+      GEMINI_EXTRACTION_MODEL: ${GEMINI_EXTRACTION_MODEL:-gemini-3.1-flash-lite}
+      GEMINI_TRANSCRIPTION_MODEL: ${GEMINI_TRANSCRIPTION_MODEL:-gemini-3.5-transcribe}
+      GEMINI_DOCUMENT_MODEL: ${GEMINI_DOCUMENT_MODEL:-gemini-3.1-flash-lite}
+      GEMINI_DIAGNOSIS_MODEL: ${GEMINI_DIAGNOSIS_MODEL:-gemini-3.6-flash}
+      GEMINI_PRESCRIPTION_MODEL: ${GEMINI_PRESCRIPTION_MODEL:-gemini-3.6-flash}
+      GEMINI_SOAP_MODEL: ${GEMINI_SOAP_MODEL:-gemini-3.5-flash-lite}
+      MEDIKIOSK_USE_EPHEMERAL_TOKENS: ${MEDIKIOSK_USE_EPHEMERAL_TOKENS:-true}
+      MEDIKIOSK_TRIAGE_MODE: ${MEDIKIOSK_TRIAGE_MODE:-SHADOW}
       NODE_ENV: production
     depends_on:
       chronos:
@@ -77,7 +87,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - '80:80'
+      - '${SANCTUARY_FRONTEND_PORT:-8081}:80'
     depends_on:
       backend:
         condition: service_healthy
@@ -95,4 +105,5 @@ networks:
     driver: bridge
 
 volumes:
-  sanctuary-postgres:
+  sanctuary-plus-postgres:
+    name: ${SANCTUARY_POSTGRES_VOLUME:-sanctuary-plus-postgres}

@@ -16,6 +16,7 @@ import type { Department, PatientTicket, VisitType } from '../../queue/types';
 
 interface PatientNewTokenWizardProps {
   patientId: string;
+  abhaId?: string;
   patientName: string;
   patientPhone: string;
   departments: Department[];
@@ -25,6 +26,7 @@ interface PatientNewTokenWizardProps {
 
 export default function PatientNewTokenWizard({
   patientId,
+  abhaId,
   patientName,
   patientPhone,
   departments,
@@ -269,8 +271,8 @@ export default function PatientNewTokenWizard({
               <span className="text-slate-900 font-bold">{patientName}</span>
             </div>
             <div className="py-2.5 flex justify-between items-center text-xs">
-              <span className="text-slate-500 font-medium">Shared Patient ID:</span>
-              <span className="text-teal-700 font-mono font-bold">{patientId}</span>
+              <span className="text-slate-500 font-medium">ABHA ID:</span>
+              <span className="text-teal-700 font-mono font-bold">{abhaId ?? 'Generating synthetic ABHA ID…'}</span>
             </div>
             <div className="py-2.5 flex justify-between items-center text-xs">
               <span className="text-slate-500 font-medium">Department:</span>

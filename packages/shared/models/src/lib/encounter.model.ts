@@ -22,6 +22,7 @@ export interface ClinicalVitalSign {
 
 export interface ClinicalExtraction {
   symptoms: string[];
+  onsetOrDuration?: string[];
   clinicalFindings: string[];
   vitals: ClinicalVitalSign[];
   currentMedications: string[];

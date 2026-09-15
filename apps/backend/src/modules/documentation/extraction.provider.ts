@@ -29,7 +29,8 @@ export class GeminiExtractionProvider implements ExtractionProvider {
       );
     }
 
-    const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+    // High-volume structured extraction: use the efficient Flash-Lite lane, not the diagnosis model.
+    const model = process.env.GEMINI_EXTRACTION_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
     this.logger.log(
       `Dispatching clinical extraction to Gemini model [${model}] (transcript length: ${transcript.length} chars)`,
     );
@@ -51,6 +52,7 @@ Strict Rules:
 5. Return ONLY a valid JSON object with the following schema:
 {
   "symptoms": ["string"],
+  "onsetOrDuration": ["string"],
   "clinicalFindings": ["string"],
   "vitals": [
     { "name": "string", "value": "string", "unit": "string" }
@@ -62,6 +64,7 @@ Strict Rules:
 
 Guidelines for fields:
 - "symptoms": Patient-reported complaints, pain descriptions, onset, duration (e.g. "severe chest tightness", "dyspnea on exertion").
+- "onsetOrDuration": Explicit statements about when the problem started, duration, onset, progression, or worsening; do not infer dates.
 - "clinicalFindings": Objective clinical signs, physician physical examination observations, or laboratory/diagnostic results mentioned (e.g. "diaphoretic", "rales in lung bases").
 - "vitals": Extracted vital signs with name, value, and unit (e.g. name: "Blood Pressure", value: "164/98", unit: "mmHg"; name: "Heart Rate", value: "102", unit: "bpm").
 - "currentMedications": Medications the patient is ALREADY taking prior to this encounter (e.g. "Lisinopril 20mg daily").
@@ -146,6 +149,7 @@ Output strictly valid JSON. Do not include preamble or conversational remarks.`;
       );
       return {
         symptoms: [],
+        onsetOrDuration: [],
         clinicalFindings: [],
         vitals: [],
         currentMedications: [],
@@ -158,6 +162,10 @@ Output strictly valid JSON. Do not include preamble or conversational remarks.`;
 
     const symptoms = Array.isArray(parsed.symptoms)
       ? parsed.symptoms.map((s) => String(s)).filter(Boolean)
+      : [];
+
+    const onsetOrDuration = Array.isArray(parsed.onsetOrDuration)
+      ? parsed.onsetOrDuration.map((item) => String(item)).filter(Boolean)
       : [];
 
     const clinicalFindings = Array.isArray(parsed.clinicalFindings)
@@ -189,6 +197,7 @@ Output strictly valid JSON. Do not include preamble or conversational remarks.`;
 
     return {
       symptoms,
+      onsetOrDuration,
       clinicalFindings,
       vitals,
       currentMedications,

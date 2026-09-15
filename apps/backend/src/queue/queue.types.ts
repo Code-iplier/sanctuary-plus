@@ -52,6 +52,7 @@ export interface DoctorProfile {
 
 export interface PatientTicket {
   id: string;
+  encounterId?: string;
   tokenNumber: string; // e.g. "GEN-104", "CARD-201"
   patientId: string;   // Shared ID format e.g. "PAT-000104"
   patientName: string;
@@ -61,6 +62,7 @@ export interface PatientTicket {
   visitType: VisitType;
   reason: string;
   triageLevel: TriageLevel;
+  triageScore?: number;
   status: TicketStatus;
   assignedDoctorId?: string | null;
   assignedRoomId?: string | null;
@@ -90,7 +92,7 @@ export interface Patient {
   phone: string;
   age?: string | number;
   gender?: string;
-  hospitalId?: string;
+  abhaId?: string;
   createdAt?: string;
 }
 

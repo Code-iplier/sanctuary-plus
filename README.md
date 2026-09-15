@@ -96,7 +96,10 @@ npm install --legacy-peer-deps
 ### Run the frontend (React + Vite + Hero UI, port 5173)
 
 ```bash
-# From the frontend app:
+# Start the isolated fork stack. It uses PostgreSQL 5434 and frontend 8081.
+docker compose -p sanctuary-plus-fork up -d --build
+
+# From the frontend app for local development:
 cd apps/frontend && npm run dev
 
 # Or via Nx (root):
@@ -107,7 +110,7 @@ npx nx serve frontend
 
 ```bash
 # From the repository root, after PostgreSQL is running:
-docker compose up -d postgres
+docker compose -p sanctuary-plus-fork up -d postgres
 Copy-Item .env.example .env # PowerShell; use `cp .env.example .env` on Unix
 npx prisma generate
 npx prisma migrate deploy
@@ -116,8 +119,38 @@ npm run start:dev
 # or: npx nx serve backend
 ```
 
-The backend loads the repository-root `.env`. The local PostgreSQL service is
-exposed on port `5433`; do not commit `.env`.
+The backend loads the repository-root `.env`. This fork's PostgreSQL service is
+exposed on port `5434` and its containerized frontend on port `8081`; do not
+commit `.env`.
+
+### Synthetic clinical cohort (local integration fixture)
+
+This fork seeds 15 clinician-authored synthetic patient records on backend
+startup. Each record has a stable patient identifier, demographics, one OPD
+encounter, a completed six-question intake, clinician-readable extracted
+facts, triage/diagnosis-support data, medication/allergy records, and 2–3
+linked prior documents with preserved source text and provenance. The fixture
+is intentionally local and does not connect to ABHA, ABDM, or a live hospital
+system; those integrations remain a later adapter boundary.
+
+To run it without touching another branch's containers or database, use a
+separate Compose project, host ports, and volume:
+
+```bash
+SANCTUARY_POSTGRES_PORT=55434 \
+SANCTUARY_FRONTEND_PORT=8082 \
+SANCTUARY_POSTGRES_VOLUME=sanctuary-plus-synthetic-cohort-20260915 \
+docker compose -p sanctuary-plus-synthetic-cohort up -d --build
+```
+
+The resulting patient portal is available at `http://localhost:8082`.
+Synthetic patient quick-login numbers are listed in the patient directory in
+`apps/frontend/src/queue/api.ts`. Synthetic patients use clearly marked `ABHA-SYN-*` fixture identifiers only; these are not connected to ABDM or a real ABHA registry.
+
+The repository default is `MEDIKIOSK_TRIAGE_MODE=SHADOW` until a hospital has
+validated the rules against clinician-labelled cases. For this synthetic local
+fixture only, set `MEDIKIOSK_TRIAGE_MODE=ACTIVE` before the Compose command to
+exercise automated queue prioritization visibly.
 
 ### Run Chronos ICU Early Warning (existing FastAPI engine, port 8000)
 
@@ -130,7 +163,7 @@ python -m uvicorn api:app --host 0.0.0.0 --port 8000 --reload
 Alternatively, start the containerized service from the repository root:
 
 ```bash
-docker compose up -d chronos
+docker compose -p sanctuary-plus-fork up -d chronos
 ```
 
 Chronos's live replay reads only `mimic4_demo/**/icu/chartevents.csv` and,
@@ -193,10 +226,19 @@ Set a strong secret in `.env` before running outside local development:
 
 ```dotenv
 JWT_SECRET=replace-this-with-a-long-random-secret
-DATABASE_URL=postgresql://sanctuary:sanctuary_dev@localhost:5433/sanctuary
+DATABASE_URL=postgresql://sanctuary:sanctuary_dev@localhost:5434/sanctuary
 CHRONOS_BASE_URL=http://127.0.0.1:8000
 PORT=3000
 NODE_ENV=development
+GEMINI_API_KEY=
+GEMINI_LIVE_MODEL=gemini-3.1-flash-live-preview
+GEMINI_EXTRACTION_MODEL=gemini-3.5-flash-lite
+GEMINI_TRANSCRIPTION_MODEL=gemini-3.5-transcribe
+GEMINI_DOCUMENT_MODEL=gemini-3.1-flash-lite
+GEMINI_DIAGNOSIS_MODEL=gemini-3.6-flash
+GEMINI_PRESCRIPTION_MODEL=gemini-3.6-flash
+GEMINI_SOAP_MODEL=gemini-3.5-flash-lite
+MEDIKIOSK_USE_EPHEMERAL_TOKENS=true
 ```
 
 The fallback JWT secret is intended only for local demonstration.
@@ -273,7 +315,7 @@ patient records.
 Start PostgreSQL and apply the Prisma migrations before starting the backend:
 
 ```bash
-docker compose up -d postgres
+docker compose -p sanctuary-plus-fork up -d postgres
 npx prisma generate
 npx prisma migrate deploy
 ```

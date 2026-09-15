@@ -213,7 +213,7 @@ export default function PatientTicketTracker({
             </div>
             <div className="p-3 bg-slate-50 rounded-xl">
               <p className="text-sm font-bold text-slate-800 pt-1">
-                {ticket.status === 'TRIAGE_PENDING' ? 'Desk Check-in' : 'Normal Wait'}
+                {ticket.status === 'TRIAGE_PENDING' ? 'Desk Check-in' : 'Live Position'}
               </p>
               <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mt-1">Status</p>
             </div>
@@ -229,7 +229,7 @@ export default function PatientTicketTracker({
 
           {/* Cancellation Option */}
           <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center text-xs text-slate-400">
-            <span>Patient ID: <strong className="font-mono text-slate-700">{ticket.patientId}</strong></span>
+            <span>Keep this token number ready when you reach the hospital desk.</span>
             <button
               type="button"
               disabled={isCancelling}

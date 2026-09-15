@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import type { TranscriptionSegment } from './documentation.types';
 
+const SUPPORTED_INDIAN_LANGUAGES = 'Indian English (en-IN), Assamese (as-IN), Bengali/Bangla (bn-IN), Gujarati (gu-IN), Hindi (hi-IN), Kannada (kn-IN), Malayalam (ml-IN), Marathi (mr-IN), Odia (or-IN), Punjabi (pa-IN), Tamil (ta-IN), Telugu (te-IN), and Urdu (ur-IN). Natural Hinglish and other code-switching between these languages are allowed.';
+
 export interface TranscriptionResult {
   transcript: string;
   language: string;
@@ -60,7 +62,7 @@ export class GeminiTranscriptionProvider implements TranscriptionProvider {
     }
 
     const mimeType = (options.mimeType || 'audio/webm').split(';')[0].trim();
-    const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+    const model = process.env.GEMINI_TRANSCRIPTION_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-transcribe';
     const duration = options.durationSeconds && options.durationSeconds > 0
       ? Math.round(options.durationSeconds)
       : Math.max(1, Math.round((cleanBase64.length * 3) / 4 / 16000));
@@ -77,6 +79,8 @@ Distinguish speakers using the format:
 [Patient]: <dialogue>
 If additional speakers are present (e.g. [Nurse], [Family]), label them accurately.
 Preserve exact medical terminology, symptoms, dosages, and drug names.
+Language policy: recognize and transcribe only ${SUPPORTED_INDIAN_LANGUAGES}.
+Preserve the patient's original language, script, and code-switching verbatim; do not translate the dialogue into English and do not substitute a supported language when the patient speaks another supported Indian language.
 Do not include conversational preamble, introductory remarks, or markdown code fences; output only the transcript dialogue.`;
 
     const requestBody = {
@@ -169,7 +173,7 @@ Do not include conversational preamble, introductory remarks, or markdown code f
 
     return {
       transcript: textCandidate,
-      language: 'en-US',
+      language: 'multi-IN',
       durationSeconds: duration,
       confidence: 0.95,
       segments: segments.length > 0 ? segments : undefined,

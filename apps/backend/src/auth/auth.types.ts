@@ -19,6 +19,14 @@ export type PatientLoginInput = {
   name?: string;
 };
 
+export type PatientRegistrationInput = {
+  name: string;
+  phone: string;
+  age?: string | number;
+  gender?: string;
+  facilityId?: string;
+};
+
 export type AuthResponse = {
   accessToken: string;
   tokenType: 'Bearer';

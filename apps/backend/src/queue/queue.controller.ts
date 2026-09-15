@@ -1,11 +1,15 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Patch,
   Post,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
+import { JwtAuthGuard, type AuthenticatedRequest } from '../auth/jwt-auth.guard';
 import { QueueGateway } from './queue.gateway';
 import { QueueService } from './queue.service';
 import {
@@ -16,6 +20,7 @@ import {
 } from './queue.types';
 
 @Controller('queue')
+@UseGuards(JwtAuthGuard)
 export class QueueController {
   constructor(
     private readonly queueService: QueueService,
@@ -23,22 +28,28 @@ export class QueueController {
   ) {}
 
   @Get('snapshot')
-  getSnapshot() {
-    return this.queueService.snapshot();
+  getSnapshot(@Req() request: AuthenticatedRequest) {
+    const user = this.user(request);
+    return user.role === 'patient'
+      ? this.queueService.patientSnapshot(user.patientId!)
+      : this.queueService.snapshot();
   }
 
   @Get('patient/:id/active')
-  getActiveTicket(@Param('id') id: string) {
+  getActiveTicket(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    this.assertPatientAccess(request, id);
     return this.queueService.getActiveTicketForPatient(id);
   }
 
   @Get('patient/:id/tickets')
-  getPatientTickets(@Param('id') id: string) {
+  getPatientTickets(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    this.assertPatientAccess(request, id);
     return this.queueService.getTicketsForPatient(id);
   }
 
   @Post('tickets/issue')
-  issueTicket(
+  async issueTicket(
+    @Req() request: AuthenticatedRequest,
     @Body()
     input: {
       patientId: string;
@@ -49,36 +60,50 @@ export class QueueController {
       reason: string;
     }
   ) {
-    const ticket = this.queueService.issueTicket(input);
+    this.assertPatientAccess(request, input.patientId);
+    const ticket = await this.queueService.issueTicket(input);
     this.queueGateway.broadcast();
     return ticket;
   }
 
   @Post('tickets/:id/triage')
   triageTicket(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body()
     input: {
       triageLevel: TriageLevel;
       vitals?: { bp?: string; pulse?: string; temp?: string; spo2?: string };
       triageNotes?: string;
+      priorityScore?: number;
       actor?: string;
     }
   ) {
+    this.assertStaff(request);
     const ticket = this.queueService.triageTicket(id, input);
     this.queueGateway.broadcast();
     return ticket;
   }
 
+  @Post('encounters/:id/automated-triage')
+  automatedTriage(@Req() request: AuthenticatedRequest, @Param('id') encounterId: string, @Body() input: { triageLevel: TriageLevel; priorityScore: number }) {
+    this.assertStaff(request);
+    const ticket = this.queueService.applyAutomatedTriage(encounterId, input);
+    this.queueGateway.broadcast();
+    return ticket;
+  }
+
   @Post('rooms/:id/call-next')
-  callNext(@Param('id') id: string, @Body() body?: { actor?: string }) {
+  callNext(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body?: { actor?: string }) {
+    this.assertStaff(request);
     const ticket = this.queueService.callNext(id, body?.actor);
     this.queueGateway.broadcast();
     return ticket;
   }
 
   @Post('rooms/:id/start')
-  startConsultation(@Param('id') id: string, @Body() body?: { actor?: string }) {
+  startConsultation(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body?: { actor?: string }) {
+    this.assertStaff(request);
     const ticket = this.queueService.startConsultation(id, body?.actor);
     this.queueGateway.broadcast();
     return ticket;
@@ -86,9 +111,11 @@ export class QueueController {
 
   @Post('rooms/:id/finish')
   finishConsultation(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() body?: { notes?: string; actor?: string }
   ) {
+    this.assertStaff(request);
     const ticket = this.queueService.finishConsultation(id, body?.notes, body?.actor);
     this.queueGateway.broadcast();
     return ticket;
@@ -96,23 +123,27 @@ export class QueueController {
 
   @Post('rooms/:id/no-show')
   markNoShow(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() body?: { reason?: string; actor?: string }
   ) {
+    this.assertStaff(request);
     const ticket = this.queueService.markNoShow(id, body?.reason, body?.actor);
     this.queueGateway.broadcast();
     return ticket;
   }
 
   @Post('rooms/:id/recall')
-  recallPatient(@Param('id') id: string, @Body() body?: { actor?: string }) {
+  recallPatient(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body?: { actor?: string }) {
+    this.assertStaff(request);
     const ticket = this.queueService.recallPatient(id, body?.actor);
     this.queueGateway.broadcast();
     return ticket;
   }
 
   @Post('rooms/:id/skip')
-  skipTicket(@Param('id') id: string, @Body() body?: { actor?: string }) {
+  skipTicket(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body?: { actor?: string }) {
+    this.assertStaff(request);
     const ticket = this.queueService.skipTicket(id, body?.actor);
     this.queueGateway.broadcast();
     return ticket;
@@ -120,9 +151,16 @@ export class QueueController {
 
   @Post('tickets/:id/cancel')
   cancelTicket(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() body?: { reason?: string; actor?: string }
   ) {
+    const user = this.user(request);
+    if (user.role === 'patient') {
+      const ticket = this.queueService.snapshot().tickets.find((candidate) => candidate.id === id);
+      if (!ticket) throw new ForbiddenException('Queue ticket not found');
+      this.assertPatientAccess(request, ticket.patientId);
+    }
     const ticket = this.queueService.cancelTicket(id, body?.reason, body?.actor);
     this.queueGateway.broadcast();
     return ticket;
@@ -130,9 +168,11 @@ export class QueueController {
 
   @Patch('tickets/:id/priority')
   updatePriority(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() input: { priority: TriageLevel; reason: string; actor?: string }
   ) {
+    this.assertStaff(request);
     const ticket = this.queueService.updatePriority(
       id,
       input.priority,
@@ -145,9 +185,11 @@ export class QueueController {
 
   @Patch('doctors/:id/status')
   updateDoctorStatus(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() input: { status: DoctorAvailability }
   ) {
+    this.assertStaff(request);
     const doc = this.queueService.updateDoctorStatus(id, input.status);
     this.queueGateway.broadcast();
     return doc;
@@ -155,11 +197,32 @@ export class QueueController {
 
   @Patch('rooms/:id/status')
   updateRoomStatus(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() input: { status: RoomStatus }
   ) {
+    this.assertStaff(request);
     const room = this.queueService.updateRoomStatus(id, input.status);
     this.queueGateway.broadcast();
     return room;
+  }
+
+  private user(request: AuthenticatedRequest) {
+    if (!request.user) throw new ForbiddenException('Authenticated user is missing');
+    return request.user;
+  }
+
+  private assertStaff(request: AuthenticatedRequest): void {
+    if (this.user(request).role !== 'staff') {
+      throw new ForbiddenException('Only hospital staff can perform this queue operation');
+    }
+  }
+
+  private assertPatientAccess(request: AuthenticatedRequest, patientId: string): void {
+    const user = this.user(request);
+    if (user.role === 'staff') return;
+    if (user.patientId !== patientId) {
+      throw new ForbiddenException('Patients may only access their own queue records');
+    }
   }
 }

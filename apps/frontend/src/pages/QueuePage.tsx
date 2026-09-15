@@ -26,6 +26,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({ session, onLogout }) => {
         patientId: session?.patientId || session?.id || 'PAT-000101',
         name: session?.name || 'Patient',
         phone: session?.phone || '9000011111',
+        abhaId: session?.abhaId,
       }
     : {
         role: 'staff',
@@ -47,7 +48,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({ session, onLogout }) => {
     });
 
     // 2. Initial bootstrap load from backend or local fallback
-    fetchBootstrap()
+    fetchBootstrap(session?.accessToken)
       .then((snap: any) => {
         if (isMounted) {
           setSnapshot(snap);
@@ -66,7 +67,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({ session, onLogout }) => {
       if (isMounted && liveSnap) {
         setSnapshot(liveSnap);
       }
-    });
+    }, session?.accessToken);
 
     return () => {
       isMounted = false;
@@ -75,11 +76,11 @@ export const QueuePage: React.FC<QueuePageProps> = ({ session, onLogout }) => {
         cleanupSocket();
       }
     };
-  }, []);
+  }, [session?.accessToken, session?.patientId, session?.role]);
 
   const handleManualRefresh = async () => {
     try {
-      const snap = await fetchSnapshot();
+      const snap = await fetchSnapshot(undefined, session?.accessToken);
       setSnapshot(snap);
     } catch (err) {
       console.error('Refresh error:', err);
@@ -173,7 +174,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({ session, onLogout }) => {
           </div>
 
           <div className="max-w-full truncate text-xs text-slate-400">
-            Hospital System ID: <span className="font-mono font-medium text-slate-600 dark:text-slate-300">{patientId}</span>
+            Your token is linked to your registered mobile number.
           </div>
         </div>
 
@@ -224,6 +225,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({ session, onLogout }) => {
             ) : (
               <PatientNewTokenWizard
                 patientId={(normalizedSession as any).patientId}
+                abhaId={(normalizedSession as any).abhaId}
                 patientName={(normalizedSession as any).name || 'Patient'}
                 patientPhone={(normalizedSession as any).phone || '9000011111'}
                 departments={currentSnapshot.departments}
@@ -255,7 +257,7 @@ export const QueuePage: React.FC<QueuePageProps> = ({ session, onLogout }) => {
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        {new Date(t.createdAt).toLocaleDateString()} at {new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Notes: {t.triageNotes || t.reason || 'OPD Consultation'}
+                        {new Date(t.createdAt).toLocaleDateString()} at {new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Reason: {t.reason || 'OPD Consultation'}
                       </p>
                     </div>
 

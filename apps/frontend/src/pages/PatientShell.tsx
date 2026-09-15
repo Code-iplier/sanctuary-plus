@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { HeartPulse, LogOut } from 'lucide-react';
 import QueuePage from './QueuePage';
-import MedicationsPage from './MedicationsPage';
+import MediKioskPage from './MediKioskPage';
+import PatientNextStepsPage from './PatientNextStepsPage';
+import PatientPrescriptionsPage from './PatientPrescriptionsPage';
+import PatientDocumentsPage from './PatientDocumentsPage';
 import type { Session } from '../queue/types';
 
 type PatientShellProps = {
@@ -10,12 +13,13 @@ type PatientShellProps = {
   onSessionChange: (session: Session) => void;
 };
 
-type PatientPanel = 'queue' | 'medications';
+type PatientPanel = 'token' | 'kiosk' | 'documents' | 'next-steps' | 'prescriptions';
 
 function panelFromLocation(): PatientPanel {
-  return window.location.hash.slice(1) === 'medications'
-    ? 'medications'
-    : 'queue';
+  const panel = window.location.hash.slice(1);
+  return panel === 'kiosk' || panel === 'documents' || panel === 'next-steps' || panel === 'prescriptions'
+    ? panel
+    : 'token';
 }
 
 export default function PatientShell({
@@ -70,18 +74,18 @@ export default function PatientShell({
                 {session.name ?? 'Patient'}
               </span>
               <span className="text-[11px] text-slate-400">
-                {session.phone ? `+91 ${session.phone}` : 'Verified'}
+                {session.abhaId ? `Synthetic ABHA ID: ${session.abhaId}` : session.phone ? `+91 ${session.phone}` : 'Verified'}
               </span>
             </div>
             <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1">
-              {(['queue', 'medications'] as const).map((panel) => (
+              {(['token', 'kiosk', 'documents', 'next-steps', 'prescriptions'] as const).map((panel) => (
                 <button
                   key={panel}
                   type="button"
                   onClick={() => navigatePanel(panel)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activePanel === panel ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500'}`}
                 >
-                  {panel === 'queue' ? 'Queue' : 'Medications'}
+                  {{ token: 'Token', kiosk: 'Kiosk', documents: 'Documents', 'next-steps': 'Next Steps', prescriptions: 'Prescriptions' }[panel]}
                 </button>
               ))}
             </div>
@@ -98,14 +102,20 @@ export default function PatientShell({
       </header>
 
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6">
-        {activePanel === 'queue' ? (
+        {activePanel === 'token' ? (
           <QueuePage
             session={session}
             onLogout={onLogout}
             onSessionChange={onSessionChange}
           />
+        ) : activePanel === 'kiosk' ? (
+          <MediKioskPage session={session} />
+        ) : activePanel === 'documents' ? (
+          <PatientDocumentsPage session={session} />
+        ) : activePanel === 'prescriptions' ? (
+          <PatientPrescriptionsPage session={session} />
         ) : (
-          <MedicationsPage session={session} />
+          <PatientNextStepsPage session={session} />
         )}
       </main>
     </div>

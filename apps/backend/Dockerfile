@@ -21,8 +21,10 @@ RUN npm ci --omit=dev --legacy-peer-deps --ignore-scripts
 COPY --from=build /app/apps/backend/dist ./apps/backend/dist
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/packages ./packages
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 EXPOSE 3000
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV CHRONOS_BASE_URL=http://chronos:8000
-CMD ["node", "apps/backend/dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy --schema prisma/schema.prisma && node apps/backend/dist/main.js"]

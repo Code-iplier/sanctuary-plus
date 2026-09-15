@@ -8,6 +8,7 @@ import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../database/database.module';
 import { MedicationsModule } from '../modules/medications/medications.module';
 import { DocumentationModule } from '../modules/documentation/documentation.module';
+import { MedikioskModule } from '../modules/medikiosk/medikiosk.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { DocumentationModule } from '../modules/documentation/documentation.modu
     QueueModule,
     MedicationsModule,
     DocumentationModule,
+    MedikioskModule,
   ],
 })
 export class AppModule {}

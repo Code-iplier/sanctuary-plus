@@ -15,12 +15,14 @@ import DocumentationPage from './DocumentationPage';
 import MedicationsPage from './MedicationsPage';
 import WardSyncPage from './WardSyncPage';
 import ChronosPage from './ChronosPage';
+import DoctorCasePage from './DoctorCasePage';
 import type { Session } from '../queue/types';
 
 const STAFF_NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'queue', label: 'Queue Operations', icon: Users },
   { id: 'documentation', label: 'Documentation', icon: FileText },
+  { id: 'ai-intake', label: 'AI Intake', icon: HeartPulse },
   { id: 'medications', label: 'Medications', icon: Shield },
   { id: 'wardsync', label: 'WardSync', icon: RadioTower },
   { id: 'chronos', label: 'Chronos ICU', icon: Activity },
@@ -83,6 +85,8 @@ export default function StaffShell({
         );
       case 'documentation':
         return <DocumentationPage />;
+      case 'ai-intake':
+        return <DoctorCasePage session={session} />;
       case 'medications':
         return <MedicationsPage session={session} />;
       case 'wardsync':

@@ -14,7 +14,7 @@ import {
   QueuePressure,
 } from './types';
 
-const STORAGE_KEY = 'sanctuary_smart_opd_v2';
+const STORAGE_KEY = 'sanctuary_smart_opd_v3';
 
 function createSeedSnapshot(): QueueSnapshot {
   const departments: Department[] = [
@@ -84,9 +84,9 @@ function createSeedSnapshot(): QueueSnapshot {
 
   const tickets: PatientTicket[] = [
     {
-      id: 'tkt-01',
+      id: 'TKT-SYN-0001',
       tokenNumber: 'GEN-101',
-      patientId: 'PAT-000101',
+      patientId: 'PAT-SYN-0001',
       patientName: 'Ananya Sharma',
       patientPhone: '9000011111',
       departmentId: 'dept-gm',
@@ -99,13 +99,13 @@ function createSeedSnapshot(): QueueSnapshot {
       triagedAt: new Date(Date.now() - 40 * 60000).toISOString(),
     },
     {
-      id: 'tkt-02',
-      tokenNumber: 'GEN-102',
-      patientId: 'PAT-000102',
+      id: 'TKT-SYN-0002',
+      tokenNumber: 'CARD-201',
+      patientId: 'PAT-SYN-0002',
       patientName: 'Rohan Patel',
       patientPhone: '9000022222',
-      departmentId: 'dept-gm',
-      departmentName: 'General Medicine',
+      departmentId: 'dept-card',
+      departmentName: 'Cardiology',
       visitType: 'NEW',
       reason: 'Chest tightness and shortness of breath',
       triageLevel: 'URGENT',
@@ -116,9 +116,9 @@ function createSeedSnapshot(): QueueSnapshot {
       triageNotes: 'Priority escalated due to vitals',
     },
     {
-      id: 'tkt-03',
-      tokenNumber: 'CARD-201',
-      patientId: 'PAT-000103',
+      id: 'TKT-SYN-0003',
+      tokenNumber: 'CARD-202',
+      patientId: 'PAT-SYN-0003',
       patientName: 'Neha Das',
       patientPhone: '9000033333',
       departmentId: 'dept-card',
@@ -126,20 +126,20 @@ function createSeedSnapshot(): QueueSnapshot {
       visitType: 'FOLLOW_UP',
       reason: 'Post-angioplasty routine review',
       triageLevel: 'FOLLOW_UP',
-      status: 'CALLED',
+      status: 'WAITING',
       assignedDoctorId: 'doc-03',
       assignedDoctorName: 'Dr. Vikram Malhotra',
       assignedRoomId: 'room-card-01',
       assignedRoomNumber: 'CARD-01',
       createdAt: new Date(Date.now() - 60 * 60000).toISOString(),
       triagedAt: new Date(Date.now() - 50 * 60000).toISOString(),
-      calledAt: new Date(Date.now() - 2 * 60000).toISOString(),
+      calledAt: undefined,
     },
     {
-      id: 'tkt-04',
+      id: 'TKT-SYN-0004',
       tokenNumber: 'PED-401',
-      patientId: 'PAT-000104',
-      patientName: 'Imran Ali (Child: Zaid)',
+      patientId: 'PAT-SYN-0004',
+      patientName: 'Zaid Ali',
       patientPhone: '9000044444',
       departmentId: 'dept-ped',
       departmentName: 'Pediatrics',
@@ -151,9 +151,9 @@ function createSeedSnapshot(): QueueSnapshot {
       triagedAt: new Date(Date.now() - 15 * 60000).toISOString(),
     },
     {
-      id: 'tkt-05',
-      tokenNumber: 'GEN-100',
-      patientId: 'PAT-000105',
+      id: 'TKT-SYN-0005',
+      tokenNumber: 'GEN-107',
+      patientId: 'PAT-SYN-0005',
       patientName: 'Priya Nambiar',
       patientPhone: '9000055555',
       departmentId: 'dept-gm',
@@ -161,23 +161,23 @@ function createSeedSnapshot(): QueueSnapshot {
       visitType: 'REVIEW',
       reason: 'Blood test reports review',
       triageLevel: 'NORMAL',
-      status: 'COMPLETED',
+      status: 'WAITING',
       assignedDoctorId: 'doc-01',
       assignedDoctorName: 'Dr. Sunita Rao',
       assignedRoomId: 'room-gm-01',
       assignedRoomNumber: 'GM-01',
       createdAt: new Date(Date.now() - 90 * 60000).toISOString(),
       triagedAt: new Date(Date.now() - 85 * 60000).toISOString(),
-      calledAt: new Date(Date.now() - 35 * 60000).toISOString(),
-      consultationStartedAt: new Date(Date.now() - 30 * 60000).toISOString(),
-      consultationCompletedAt: new Date(Date.now() - 15 * 60000).toISOString(),
+      calledAt: undefined,
+      consultationStartedAt: undefined,
+      consultationCompletedAt: undefined,
     },
   ];
 
   const events: QueueEvent[] = [
     {
       id: 'ev-01',
-      ticketId: 'tkt-05',
+      ticketId: 'TKT-SYN-0005',
       eventType: 'CONSULTATION_COMPLETED',
       actor: 'Dr. Sunita Rao',
       detail: 'Consultation finished in Room GM-01 for Priya Nambiar',
@@ -185,7 +185,7 @@ function createSeedSnapshot(): QueueSnapshot {
     },
     {
       id: 'ev-02',
-      ticketId: 'tkt-03',
+      ticketId: 'TKT-SYN-0003',
       eventType: 'PATIENT_CALLED',
       actor: 'Dr. Vikram Malhotra',
       detail: 'Called Token CARD-201 to Room CARD-01',
@@ -304,6 +304,29 @@ export function loadLocalSnapshot(): QueueSnapshot {
     const fallback = createSeedSnapshot();
     return fallback;
   }
+}
+
+/** Fallback queue state for a patient portal session; never returns other patients. */
+export function loadPatientSnapshotLocal(patientId: string): QueueSnapshot {
+  const snapshot = loadLocalSnapshot();
+  return {
+    departments: snapshot.departments,
+    rooms: [],
+    doctors: [],
+    tickets: snapshot.tickets
+      .filter((ticket) => ticket.patientId === patientId)
+      .map((ticket) => ({
+        ...ticket,
+        patientPhone: '',
+        triageLevel: 'NORMAL' as const,
+        triageScore: undefined,
+        triageNotes: undefined,
+        vitals: undefined,
+      })),
+    events: [],
+    policy: snapshot.policy,
+    metrics: [],
+  };
 }
 
 type Listener = (snapshot: QueueSnapshot) => void;
