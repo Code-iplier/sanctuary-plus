@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Brain, CheckCircle2, FileText, MessageSquare, Play, RefreshCw, Save, ShieldAlert, Stethoscope, View } from 'lucide-react';
+import { Activity, Brain, CheckCircle2, ChevronRight, FileText, FileSearch, MessageSquare, Play, RefreshCw, Save, ShieldAlert, Stethoscope, Users, View, X } from 'lucide-react';
 import type { Session } from '../queue/types';
 import {
   finalizeConsultation,
@@ -72,6 +72,22 @@ function factSourceLabel(value: unknown): string {
   }
 }
 
+function problemOriginLabel(origin: any): string {
+  if (origin?.type === 'FAMILY_HISTORY') return origin.relationship ? `Family history · ${origin.relationship}` : 'Family history';
+  if (origin?.type === 'DOCUMENT') return 'Supporting document';
+  if (origin?.type === 'AYUSH_HISTORY') return 'AYUSH history';
+  if (origin?.type === 'CLINICIAN_ENTERED') return 'Clinician entered';
+  return 'Patient history';
+}
+
+function problemStatusLabel(problem: any): string {
+  if (problem?.status === 'REVIEW_REQUIRED') return 'Source conflict · review';
+  if (problem?.clinicianConfirmed) return 'Clinician confirmed';
+  if (problem?.status === 'MULTI_SOURCE') return 'Multiple sources';
+  if (problem?.status === 'DOCUMENTED') return 'Document supported';
+  return 'Patient reported';
+}
+
 export default function DoctorCasePage({ session }: Props) {
   const [tickets, setTickets] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState('');
@@ -90,6 +106,7 @@ export default function DoctorCasePage({ session }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [editingFactId, setEditingFactId] = useState<string | null>(null);
   const [factCorrection, setFactCorrection] = useState('');
+  const [selectedProblem, setSelectedProblem] = useState<any | null>(null);
   const accessToken = session.accessToken ?? '';
 
   const refreshTickets = async () => {
@@ -121,16 +138,20 @@ export default function DoctorCasePage({ session }: Props) {
     setReportData({});
     setPdfUrl(null);
     setSupportingDocumentation([]);
+    setSelectedProblem(null);
     void getEncounterWorkflow(accessToken, selectedId)
       .then(async (data) => {
         if (cancelled) return;
         setEncounter(data);
         setConsultation(data.consultations?.[0] ?? null);
-        const latestSessionId = data.kioskSessions?.[0]?.id;
+        const currentKioskSession = data.kioskSessions?.find((candidate: any) => !['ABANDONED', 'CANCELLED'].includes(String(candidate.status))) ?? data.kioskSessions?.[0];
+        const latestSessionId = currentKioskSession?.id;
         const currentReport = latestSessionId
           ? data.intakeReports?.find((candidate: any) => candidate.kioskSessionId === latestSessionId)
           : data.intakeReports?.[0];
-        const report = (currentReport?.report ?? {}) as Record<string, unknown>;
+        const report = (currentReport?.report && typeof currentReport.report === 'object' && Object.keys(currentReport.report).length > 0
+          ? currentReport.report
+          : currentKioskSession?.clinicalState ?? {}) as Record<string, unknown>;
         setReportData(report);
         setPdfUrl(null);
         if (currentReport?.status === 'PATIENT_VERIFIED' || currentReport?.status === 'CLINICIAN_CONFIRMED') {
@@ -149,7 +170,10 @@ export default function DoctorCasePage({ session }: Props) {
   const ticket = useMemo(() => tickets.find((candidate) => candidate.id === selectedId), [selectedId, tickets]);
   const transcriptEntries = useMemo(() => readableTranscript(reportData.transcript), [reportData.transcript]);
   const triage = (reportData.clinicianTriage ?? {}) as Record<string, any>;
-  const displayKioskSession = encounter?.kioskSessions?.[0];
+  const displayKioskSession = encounter?.kioskSessions?.find((candidate: any) => !['ABANDONED', 'CANCELLED'].includes(String(candidate.status))) ?? encounter?.kioskSessions?.[0];
+  const historySummary = encounter?.historySummary as any;
+  const importantProblems = Array.isArray(historySummary?.importantProblems) ? historySummary.importantProblems : [];
+  const historyConflicts = Array.isArray(historySummary?.conflicts) ? historySummary.conflicts : [];
 
   const confirmReport = async () => {
     try {
@@ -260,6 +284,20 @@ export default function DoctorCasePage({ session }: Props) {
     }
   };
 
+  const confirmProblem = async (problem: any) => {
+    const evidenceIds = new Set((problem.origins ?? []).flatMap((origin: any) => origin.evidenceIds ?? []));
+    const fact = (displayKioskSession?.facts ?? []).find((candidate: any) => {
+      const transcriptId = candidate.transcriptEntry?.id ? `transcript:${candidate.transcriptEntry.id}` : '';
+      return evidenceIds.has(transcriptId) || evidenceIds.has(`transcript:${candidate.id}`);
+    });
+    if (!fact) {
+      setMessage('This summary has no editable intake fact attached. Review the source document or transcript before confirming it.');
+      return;
+    }
+    await reviewFact(fact, 'ACCEPTED');
+    setSelectedProblem({ ...problem, clinicianConfirmed: true });
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -271,19 +309,45 @@ export default function DoctorCasePage({ session }: Props) {
       </div>
       {message && <div className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">{message}</div>}
       {!encounter ? <div className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500">Select a patient with a persisted encounter.</div> : <>
+        <section className="rounded-2xl border border-teal-100 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">AI-prepared history</p><h3 className="mt-1 text-xl font-bold text-slate-900">Important problems</h3><p className="mt-1 text-sm text-slate-500">Summarized for quick review. Select a problem to see where it came from and inspect the evidence.</p></div>
+            <div className="flex items-center gap-2 rounded-xl bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800"><FileSearch className="h-4 w-4" /> Evidence-first view</div>
+          </div>
+          {importantProblems.length === 0 ? <p className="mt-5 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No clinically relevant problems have been structured yet.</p> : <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {importantProblems.map((problem: any) => <button key={problem.id} type="button" onClick={() => setSelectedProblem(problem)} className={`group rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${problem.status === 'REVIEW_REQUIRED' ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200 bg-slate-50/70'}`}>
+              <div className="flex items-start justify-between gap-2"><p className="text-base font-bold text-slate-900">{problem.name}</p><ChevronRight className="h-5 w-5 shrink-0 text-slate-400 transition group-hover:translate-x-0.5" /></div>
+              <p className="mt-2 line-clamp-2 text-sm leading-5 text-slate-600">{problem.summary}</p>
+              <div className="mt-3 flex flex-wrap gap-1.5">{(problem.origins ?? []).slice(0, 2).map((origin: any, index: number) => <span key={`${problem.id}-origin-${index}`} className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-teal-700">{problemOriginLabel(origin)}</span>)}<span className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{problemStatusLabel(problem)}</span></div>
+            </button>)}
+          </div>}
+          {historyConflicts.length > 0 && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4"><div className="flex items-center gap-2 text-sm font-bold text-amber-900"><ShieldAlert className="h-4 w-4" /> Source differences need review</div><p className="mt-1 text-xs leading-5 text-amber-800">The patient statement and an uploaded record do not match exactly. Review the original source before confirming.</p><div className="mt-3 space-y-3">{historyConflicts.map((conflict: any, index: number) => <div key={`${conflict.problemName}-${index}`} className="grid gap-2 rounded-xl bg-white p-3 text-xs md:grid-cols-2"><div><p className="font-bold uppercase tracking-wider text-teal-700">Patient statement</p><p className="mt-1 leading-5 text-slate-700">{conflict.patientStatement}</p></div><div><p className="font-bold uppercase tracking-wider text-indigo-700">Document statement</p><p className="mt-1 leading-5 text-slate-700">{conflict.documentStatement}</p></div></div>)}</div></div>}
+          <div className="mt-6 grid gap-3 lg:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 p-4"><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600"><Activity className="h-4 w-4 text-teal-600" /> Personal history</p><div className="mt-3 space-y-2">{(historySummary?.personal?.pastConditions ?? []).slice(0, 4).map((problem: any) => <button type="button" key={`personal-${problem.id}`} onClick={() => setSelectedProblem(problem)} className="block text-left text-sm text-slate-700 hover:text-teal-700">{problem.name}</button>)}{(historySummary?.personal?.pastConditions ?? []).length === 0 && <p className="text-sm text-slate-400">No past conditions reported.</p>}</div></div>
+            <div className="rounded-xl border border-slate-200 p-4"><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600"><Users className="h-4 w-4 text-indigo-600" /> Family history</p><div className="mt-3 space-y-2">{(historySummary?.family?.problems ?? []).slice(0, 4).map((problem: any) => <button type="button" key={`family-${problem.id}`} onClick={() => setSelectedProblem(problem)} className="block text-left text-sm text-slate-700 hover:text-indigo-700">{problem.name} · {(problem.origins ?? []).find((origin: any) => origin.type === 'FAMILY_HISTORY')?.relationship ?? 'Family member'}</button>)}{(historySummary?.family?.problems ?? []).length === 0 && <p className="text-sm text-slate-400">No family conditions reported.</p>}</div></div>
+            <div className="rounded-xl border border-slate-200 p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-600">AYUSH history</p><div className="mt-3 space-y-2">{(historySummary?.ayush?.items ?? []).slice(0, 4).map((problem: any) => <button type="button" key={`ayush-${problem.id}`} onClick={() => setSelectedProblem(problem)} className="block text-left text-sm text-slate-700 hover:text-teal-700">{problem.name}</button>)}{(historySummary?.ayush?.items ?? []).length === 0 && <p className="text-sm text-slate-400">Not assessed or reported.</p>}</div></div>
+          </div>
+          {selectedProblem && <div className="mt-5 rounded-2xl border-2 border-teal-200 bg-teal-50/40 p-5">
+            <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-teal-700">Problem details</p><h4 className="mt-1 text-xl font-bold text-slate-900">{selectedProblem.name}</h4><p className="mt-2 text-sm leading-6 text-slate-700">{selectedProblem.summary}</p></div><button type="button" aria-label="Close problem details" onClick={() => setSelectedProblem(null)} className="rounded-lg p-1 text-slate-500 hover:bg-white"><X className="h-5 w-5" /></button></div>
+            <div className="mt-5 grid gap-4 md:grid-cols-2"><div className="rounded-xl bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Information source</p><div className="mt-2 space-y-2">{(selectedProblem.origins ?? []).map((origin: any, index: number) => <div key={`detail-origin-${index}`} className="rounded-lg border border-slate-200 p-3 text-sm text-slate-700"><p className="font-semibold">{problemOriginLabel(origin)}</p>{origin.details && <p className="mt-1 text-xs text-slate-500">{origin.details}</p>}{origin.side && <p className="mt-1 text-xs text-slate-500">Side: {origin.side}</p>}</div>)}</div></div><div className="rounded-xl bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Evidence</p><div className="mt-2 space-y-2">{(selectedProblem.evidence ?? []).map((evidence: any) => { const supportingDocument = evidence.documentId ? supportingDocumentation.find((candidate) => candidate.id === evidence.documentId) : null; return <div key={evidence.id} className="rounded-lg border border-slate-200 p-3"><p className="text-sm font-semibold text-slate-800">{evidence.type === 'DOCUMENT' ? supportingDocument?.title ?? 'Supporting document' : evidence.type === 'TRANSCRIPT' ? 'MediKiosk conversation' : 'MediKiosk intake'}</p>{evidence.excerpt && <p className="mt-1 text-xs leading-5 text-slate-600">“{evidence.excerpt}”</p>}<div className="mt-2 flex flex-wrap gap-2">{evidence.type !== 'DOCUMENT' && <button type="button" onClick={() => globalThis.document.getElementById('intake-transcript')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="rounded-lg border border-teal-200 px-2.5 py-1.5 text-xs font-semibold text-teal-700">View conversation</button>}{supportingDocument && evidence.originalFileAvailable && <button type="button" onClick={() => void viewDocument(supportingDocument)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700">Open original file</button>}</div></div>; })}</div></div></div>
+            <div className="mt-4 flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-slate-600">Status: {problemStatusLabel(selectedProblem)}</span>{!selectedProblem.clinicianConfirmed && <button type="button" onClick={() => void confirmProblem(selectedProblem)} className="rounded-xl bg-teal-700 px-3 py-2 text-xs font-semibold text-white">Confirm problem</button>}<button type="button" onClick={() => document.getElementById('intake-facts')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Edit source fact</button></div>
+          </div>}
+        </section>
         <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-teal-700">Patient record passport</p><h3 className="mt-1 text-lg font-bold text-slate-900">{ticket?.patient?.displayName ?? encounter.patient?.displayName}</h3><p className="mt-1 text-xs text-slate-500">Synthetic ABHA ID: {encounter.patient?.externalId ?? encounter.patientId} · {patientAge(encounter.patient?.dateOfBirth, encounter.patient?.age)}{encounter.patient?.gender ? ` · ${encounter.patient.gender}` : ''}{encounter.patient?.bloodGroup ? ` · ${encounter.patient.bloodGroup}` : ''}</p><p className="mt-1 text-xs text-slate-500">Preferred language: {encounter.patient?.preferredLanguage ?? 'Not recorded'} · Visit: {new Date(encounter.startedAt).toLocaleDateString()}</p></div><FileText className="h-6 w-6 text-teal-600" /></div>
-            <h4 className="mt-6 flex items-center gap-2 text-sm font-bold text-slate-800"><Activity className="h-4 w-4 text-teal-600" /> Extracted clinical information</h4>
-            <p className="mt-1 text-xs text-slate-500">Patient-reported information, arranged for quick clinical review.</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">{REPORT_FIELDS.map(([key, label]) => <div key={key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="flex items-center justify-between gap-2"><p className="text-[11px] font-bold uppercase tracking-wider text-teal-700">{label}</p><span className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Captured</span></div><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">{presentClinicalValue(reportData[key])}</p></div>)}</div>
+            <details className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+              <summary className="cursor-pointer list-none text-sm font-bold text-slate-800"><span className="mr-2 text-teal-600">＋</span>View captured intake fields</summary>
+              <p className="mt-3 text-xs text-slate-500">Patient-reported fields retained as source context. The problem cards above are the clinician’s quick starting point.</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">{REPORT_FIELDS.map(([key, label]) => <div key={key} className="rounded-2xl border border-slate-200 bg-white p-4"><div className="flex items-center justify-between gap-2"><p className="text-[11px] font-bold uppercase tracking-wider text-teal-700">{label}</p><span className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Captured</span></div><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">{presentClinicalValue(reportData[key])}</p></div>)}</div>
+            </details>
             <button type="button" onClick={() => void confirmReport()} className="mt-3 flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white"><CheckCircle2 className="h-4 w-4" /> Confirm history</button>
             {pdfUrl && <div className="mt-5"><p className="text-xs font-bold uppercase tracking-wider text-teal-700">Patient-verified hospital report</p><iframe title="Patient-verified hospital intake report" src={pdfUrl} className="mt-2 h-96 w-full rounded-xl border border-slate-200" /><a href={pdfUrl} download="sanctuary-plus-intake-report.pdf" className="mt-2 block text-center rounded-xl border border-teal-200 px-3 py-2 text-xs font-semibold text-teal-700">Download report copy</a></div>}
           </section>
           <section className="space-y-4"><div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5"><div className="flex items-center gap-2 text-sm font-bold text-amber-900"><ShieldAlert className="h-5 w-5" /> Safety signals</div><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-amber-900">{presentClinicalValue(displayKioskSession?.safetySignals ?? 'None reported')}</p><p className="mt-5 text-xs text-amber-800">AI signals require clinical review and never constitute a diagnosis.</p></div>{Boolean(reportData.clinicianTriage) && <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5"><div className="flex items-center gap-2 text-sm font-bold text-indigo-900"><Brain className="h-5 w-5" /> Clinical assessment support</div><div className="mt-4 rounded-xl bg-white/70 p-3"><p className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">Suggested queue priority</p><p className="mt-1 text-2xl font-black text-indigo-950">{String(triage.priority ?? 'NORMAL').replace('_', ' ')}</p><p className="mt-1 text-xs text-indigo-700">{triage.mode === 'ACTIVE' ? 'Configured for validated queue automation.' : 'Shadow mode: recorded for review; it has not moved the patient in the queue.'}</p></div><p className="mt-4 text-[11px] font-bold uppercase tracking-wider text-indigo-700">Possible clinical categories</p><div className="mt-2 space-y-2">{(Array.isArray(triage.possibleConditions) ? triage.possibleConditions : []).map((condition: string) => <div key={condition} className="rounded-xl border border-indigo-100 bg-white p-3 text-sm font-semibold text-indigo-950">{condition}</div>)}</div>{Array.isArray(triage.possibleDiagnoses) && triage.possibleDiagnoses.length > 0 && <><p className="mt-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-indigo-700"><Stethoscope className="h-3.5 w-3.5" /> Clinical possibilities to assess</p><div className="mt-2 space-y-2">{triage.possibleDiagnoses.map((diagnosis: any) => <div key={`${diagnosis.name}-${diagnosis.certainty}`} className="rounded-xl border border-indigo-100 bg-white p-3"><p className="text-sm font-bold text-indigo-950">{diagnosis.name}</p><p className="mt-1 text-xs text-indigo-700">{String(diagnosis.certainty ?? 'suggested').replace('_', ' ')} · not a diagnosis</p>{Array.isArray(diagnosis.supportingEvidence) && <p className="mt-2 text-xs leading-5 text-slate-600">Supporting evidence: {diagnosis.supportingEvidence.join('; ')}</p>}</div>)}</div></>}<p className="mt-4 text-sm leading-6 text-indigo-950"><strong>Why this was elevated:</strong> {String(triage.reason ?? 'No automated emergency red flag was identified.')}</p><p className="mt-3 text-xs leading-5 text-indigo-700">{String(triage.disclaimer ?? 'Clinician decision support only; confirm with clinical assessment.')}</p></div>}</section>
         </div>
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-teal-600" /><div><h3 className="text-sm font-bold text-slate-900">Conversation transcript</h3><p className="mt-1 text-xs text-slate-500">The complete saved conversation used for extraction.</p></div></div><div className="mt-4 max-h-80 space-y-3 overflow-y-auto pr-1">{transcriptEntries.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No transcript has been saved yet.</p> : transcriptEntries.map((entry, index) => <div key={`${entry.speaker}-${index}`} className={`rounded-2xl p-4 ${entry.speaker.toLowerCase().includes('patient') ? 'bg-teal-50' : 'bg-slate-50'}`}><p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{entry.speaker.toLowerCase().includes('patient') ? 'Patient' : entry.speaker.toLowerCase().includes('assistant') || entry.speaker.toLowerCase().includes('model') ? 'MediKiosk' : entry.speaker}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-800">{entry.text}</p></div>)}</div></section>
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section id="intake-transcript" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-teal-600" /><div><h3 className="text-sm font-bold text-slate-900">Conversation transcript</h3><p className="mt-1 text-xs text-slate-500">The complete saved conversation used for extraction.</p></div></div><div className="mt-4 max-h-80 space-y-3 overflow-y-auto pr-1">{transcriptEntries.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No transcript has been saved yet.</p> : transcriptEntries.map((entry, index) => <div key={`${entry.speaker}-${index}`} className={`rounded-2xl p-4 ${entry.speaker.toLowerCase().includes('patient') ? 'bg-teal-50' : 'bg-slate-50'}`}><p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{entry.speaker.toLowerCase().includes('patient') ? 'Patient' : entry.speaker.toLowerCase().includes('assistant') || entry.speaker.toLowerCase().includes('model') ? 'MediKiosk' : entry.speaker}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-800">{entry.text}</p></div>)}</div></section>
+        <section id="intake-facts" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div><h3 className="text-sm font-bold text-slate-900">Prior records and documents</h3><p className="mt-1 text-xs text-slate-500">Source records and their extracted details. Review the original record before relying on an automated reading.</p></div>
             <FileText className="h-5 w-5 text-slate-400" />

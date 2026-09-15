@@ -137,4 +137,23 @@ export class MedikioskController {
   prescriptions(@Req() request: AuthenticatedRequest, @Param('patientId') patientId: string) {
     return this.service.listPrescriptions(request.user!, patientId);
   }
+
+  @Get('family-members/:abhaId')
+  familyMember(@Req() request: AuthenticatedRequest, @Param('abhaId') abhaId: string) {
+    return this.service.getFamilyMemberHealthSummary(request.user!, abhaId);
+  }
+
+  @Get('family-members/:abhaId/documents/:documentId/content')
+  async familyDocumentContent(@Req() request: AuthenticatedRequest, @Param('abhaId') abhaId: string, @Param('documentId') documentId: string, @Res() response: Response) {
+    const document = await this.service.getFamilyMemberDocumentContent(request.user!, abhaId, documentId);
+    response.set({ 'Content-Type': document.mimeType, 'Content-Disposition': `inline; filename="${document.filename.replace(/"/g, '')}"` });
+    response.send(document.data);
+  }
+
+  @Get('family-members/:abhaId/encounters/:encounterId/report-pdf')
+  async familyReportPdf(@Req() request: AuthenticatedRequest, @Param('abhaId') abhaId: string, @Param('encounterId') encounterId: string, @Res() response: Response) {
+    const pdf = await this.service.getFamilyMemberReportPdf(request.user!, abhaId, encounterId);
+    response.set({ 'Content-Type': pdf.mimeType, 'Content-Disposition': `inline; filename="${pdf.filename}"` });
+    response.send(pdf.data);
+  }
 }

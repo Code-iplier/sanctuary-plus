@@ -29,8 +29,11 @@ import { QueueService } from '../../queue/queue.service';
 import { DocumentOcrProvider, type SupportedDocumentType } from './document-ocr.provider';
 import { recommendDepartmentExtension } from './medikiosk.extensions';
 import { coreAnswerComplete, isLanguagePreferenceRequest, missingCoreDetail, supplementStateFromPatientText } from './medikiosk.intake';
+import { buildHistorySummary } from './history-summary';
+import { buildFamilyHistorySummary } from './family-history';
 
 const DEFAULT_LIVE_MODEL = 'gemini-3.1-flash-live-preview';
+const DIAGNOSIS_REQUEST_BUDGET_MS = 3_000;
 const CORE_INTAKE_QUESTIONS = [
   'What is the main problem that brings you to the hospital today?',
   'How long has it been going on?',
@@ -58,6 +61,20 @@ export class MedikioskService {
 
   private triageMode(): 'SHADOW' | 'ACTIVE' {
     return this.config.get<string>('MEDIKIOSK_TRIAGE_MODE')?.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : 'SHADOW';
+  }
+
+  private async suggestDiagnosesWithinBudget(transcript: string) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        this.diagnosisProvider.suggestDiagnoses(transcript),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Optional diagnosis synthesis exceeded its response budget')), DIAGNOSIS_REQUEST_BUDGET_MS);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   private async handleTriageDecision(user: AuthUser, encounterId: string, patientId: string, triage: ReturnType<typeof assessMediKioskReport>) {
@@ -151,8 +168,27 @@ export class MedikioskService {
   async updateState(user: AuthUser, sessionId: string, input: StateUpdateInput) {
     const session = await this.getSession(user, sessionId);
     const currentQuestionIndex = Math.max(0, Math.min(6, session.questionIndex));
-    if (typeof input.questionIndex !== 'number' || input.questionIndex !== currentQuestionIndex) {
+    if (typeof input.questionIndex !== 'number' || input.questionIndex > currentQuestionIndex) {
       throw new BadRequestException(`This intake is on core question ${Math.min(currentQuestionIndex + 1, 6)}. Do not repeat or skip a completed question.`);
+    }
+    // Live can deliver the same function call twice when a response is
+    // interrupted or resumed. The first call has already advanced the
+    // server-owned state; acknowledge the stale duplicate so the model does
+    // not receive an error and ask the accepted question again.
+    if (input.questionIndex < currentQuestionIndex) {
+      return {
+        ...session,
+        interview: {
+          currentQuestionIndex,
+          nextQuestionText: currentQuestionIndex < CORE_INTAKE_QUESTIONS.length ? CORE_INTAKE_QUESTIONS[currentQuestionIndex] : null,
+          followUpQuestionText: null,
+          missingDetail: null,
+          followUpCount: session.followUpCount,
+          shouldAdvance: true,
+          followUpAllowed: false,
+          instruction: 'This answer was already accepted. Do not repeat the previous question; continue with the current server question exactly once.',
+        },
+      };
     }
     const currentState = session.clinicalState && typeof session.clinicalState === 'object' && !Array.isArray(session.clinicalState)
       ? session.clinicalState as Record<string, unknown>
@@ -445,7 +481,7 @@ export class MedikioskService {
     const transcript = typeof input.report.transcript === 'string' ? input.report.transcript : '';
     if (transcript.trim().length >= 10) {
       try {
-        const impression = await this.diagnosisProvider.suggestDiagnoses(transcript);
+        const impression = await this.suggestDiagnosesWithinBudget(transcript);
         clinicianTriage.possibleDiagnoses = impression.diagnoses.map((diagnosis) => ({
           name: diagnosis.name,
           certainty: diagnosis.certainty,
@@ -562,7 +598,12 @@ export class MedikioskService {
     if (!encounter) throw new NotFoundException('Encounter not found');
     this.assertAccess(user, encounter.patientId);
     if (user.role !== 'patient') {
-      const report = encounter.intakeReports.find((candidate) => candidate.status === 'PATIENT_VERIFIED' || candidate.status === 'CLINICIAN_CONFIRMED') ?? encounter.intakeReports[0];
+      const latestSession = encounter.kioskSessions.find((candidate) => !['ABANDONED', 'CANCELLED'].includes(String(candidate.status))) ?? encounter.kioskSessions[0];
+      // Never mix an older report with the newest kiosk attempt. A patient
+      // can have more than one session for the same encounter after an
+      // interrupted or explicitly restarted interview.
+      const report = (latestSession ? encounter.intakeReports.find((candidate) => candidate.kioskSessionId === latestSession.id) : undefined)
+        ?? (!latestSession ? encounter.intakeReports.find((candidate) => candidate.status === 'PATIENT_VERIFIED' || candidate.status === 'CLINICIAN_CONFIRMED') ?? encounter.intakeReports[0] : undefined);
       if (report && report.report && typeof report.report === 'object' && !Array.isArray(report.report)) {
         const stored = report.report as Record<string, unknown>;
         const currentTriage = stored.clinicianTriage as Record<string, unknown> | undefined;
@@ -577,7 +618,7 @@ export class MedikioskService {
           const transcript = typeof stored.transcript === 'string' ? stored.transcript : '';
           if (transcript.trim().length >= 10) {
             try {
-              const impression = await this.diagnosisProvider.suggestDiagnoses(transcript);
+              const impression = await this.suggestDiagnosesWithinBudget(transcript);
               clinicianTriage.possibleDiagnoses = impression.diagnoses.map((diagnosis) => ({ name: diagnosis.name, certainty: diagnosis.certainty, supportingEvidence: diagnosis.supportingEvidence }));
             } catch {
               // The deterministic safety screen remains available if optional synthesis is unavailable.
@@ -592,9 +633,25 @@ export class MedikioskService {
         }
       }
     }
+    const currentSession = encounter.kioskSessions.find((candidate) => !['ABANDONED', 'CANCELLED'].includes(String(candidate.status))) ?? encounter.kioskSessions[0];
+    // Keep report, transcript, facts, and summary on the same session. If a
+    // fresh session has not generated a report yet, use its live clinical
+    // state instead of falling back to a previous session's report.
+    const currentReport = currentSession
+      ? encounter.intakeReports.find((candidate) => candidate.kioskSessionId === currentSession.id)
+      : encounter.intakeReports[0];
+    const summaryReport = currentReport?.report && typeof currentReport.report === 'object' && !Array.isArray(currentReport.report)
+      ? currentReport.report as Record<string, unknown>
+      : currentSession?.clinicalState && typeof currentSession.clinicalState === 'object' && !Array.isArray(currentSession.clinicalState)
+        ? currentSession.clinicalState as Record<string, unknown>
+        : {};
+    const historySummary = currentSession
+      ? buildHistorySummary({ patientId: encounter.patientId, sessionId: currentSession.id, report: summaryReport, facts: currentSession.facts, documents: encounter.documents })
+      : null;
+    const encounterWithHistory = historySummary ? { ...encounter, historySummary } : encounter;
     if (user.role === 'patient') {
       return {
-        ...encounter,
+        ...encounterWithHistory,
         intakeReports: encounter.intakeReports.map((report) => {
           if (!report.report || typeof report.report !== 'object' || Array.isArray(report.report)) return report;
           const { clinicianTriage: _hiddenTriage, ...patientReport } = report.report as Record<string, unknown>;
@@ -602,7 +659,7 @@ export class MedikioskService {
         }),
       };
     }
-    return encounter;
+    return encounterWithHistory;
   }
 
   async getActivePatientEncounter(user: AuthUser, patientId: string) {
@@ -780,6 +837,91 @@ export class MedikioskService {
   async listPrescriptions(user: AuthUser, patientId: string) {
     this.assertPatientOrStaff(user, patientId);
     return this.prisma.prescription.findMany({ where: { patientId, status: 'FINALIZED' }, orderBy: { finalizedAt: 'desc' } });
+  }
+
+  async getFamilyMemberHealthSummary(user: AuthUser, abhaId: string) {
+    if (user.role !== 'patient' || !user.patientId) throw new ForbiddenException('Patient access is required to view family records');
+    const normalizedAbhaId = abhaId.trim().toUpperCase();
+    if (!normalizedAbhaId) throw new BadRequestException('A family member ABHA ID is required');
+    const member = await this.prisma.patient.findUnique({
+      where: { externalId: normalizedAbhaId },
+      include: {
+        encounters: { select: { id: true, type: true, status: true, startedAt: true, endedAt: true }, orderBy: { startedAt: 'desc' } },
+        kioskSessions: { orderBy: { createdAt: 'desc' }, include: { facts: { include: { transcriptEntry: true } }, report: true } },
+        documents: { select: CLINICAL_DOCUMENT_SUMMARY_SELECT, orderBy: { documentDate: 'desc' } },
+        medications: { where: { status: { not: 'DISCONTINUED' } }, orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }] },
+        allergies: { where: { status: { not: 'INACTIVE' } }, orderBy: { createdAt: 'desc' } },
+        intakeReports: { where: { status: { in: ['PATIENT_VERIFIED', 'CLINICIAN_CONFIRMED'] } }, orderBy: { updatedAt: 'desc' } },
+      },
+    });
+    if (!member) throw new NotFoundException('No patient record was found for that ABHA ID');
+    if (member.id === user.patientId) throw new BadRequestException('Use My health history to view your own record');
+
+    const historySummary = buildFamilyHistorySummary({ patientId: member.id, sessions: member.kioskSessions, documents: member.documents });
+    const documents = member.documents.map((document) => {
+      const { documentText: _documentText, ...safeDocument } = document;
+      return { ...safeDocument, originalFileAvailable: Boolean(document.originalFilename) };
+    });
+    const reports = member.intakeReports.map((report) => {
+      const reportData = report.report && typeof report.report === 'object' && !Array.isArray(report.report) ? { ...(report.report as Record<string, unknown>) } : {};
+      delete reportData.clinicianTriage;
+      return {
+        id: report.id,
+        encounterId: report.encounterId,
+        kioskSessionId: report.kioskSessionId,
+        status: report.status,
+        updatedAt: report.updatedAt,
+        report: reportData,
+        pdfAvailable: Boolean(report.pdfData),
+      };
+    });
+    await this.audit(user, member.id, 'FAMILY_RECORD_VIEWED', 'Patient', member.id, { abhaId: normalizedAbhaId, viewerPatientId: user.patientId });
+    return {
+      member: {
+        id: member.id,
+        abhaId: member.externalId ?? normalizedAbhaId,
+        name: member.displayName,
+        age: member.age,
+        gender: member.gender,
+        bloodGroup: member.bloodGroup,
+        preferredLanguage: member.preferredLanguage,
+      },
+      historySummary,
+      visits: member.encounters.map((encounter) => ({ id: encounter.id, type: encounter.type, status: encounter.status, startedAt: encounter.startedAt, endedAt: encounter.endedAt })),
+      reports,
+      documents,
+      medications: member.medications,
+      allergies: member.allergies,
+    };
+  }
+
+  async getFamilyMemberDocumentContent(user: AuthUser, abhaId: string, documentId: string): Promise<{ data: Buffer; filename: string; mimeType: string }> {
+    const member = await this.findFamilyMemberForViewer(user, abhaId);
+    const document = await this.prisma.clinicalDocument.findFirst({ where: { id: documentId, patientId: member.id } });
+    if (!document || !document.binaryData) throw new NotFoundException('The original family record is not available');
+    await this.audit(user, member.id, 'FAMILY_DOCUMENT_VIEWED', 'ClinicalDocument', document.id, { abhaId: member.externalId ?? abhaId.trim().toUpperCase(), viewerPatientId: user.patientId ?? '' });
+    return { data: Buffer.from(document.binaryData), filename: document.originalFilename ?? `${document.id}.pdf`, mimeType: document.mimeType };
+  }
+
+  async getFamilyMemberReportPdf(user: AuthUser, abhaId: string, encounterId: string): Promise<{ data: Buffer; filename: string; mimeType: string }> {
+    const member = await this.findFamilyMemberForViewer(user, abhaId);
+    const report = await this.prisma.intakeReport.findFirst({ where: { patientId: member.id, encounterId, status: { in: ['PATIENT_VERIFIED', 'CLINICIAN_CONFIRMED'] } }, include: { encounter: true } });
+    if (!report) throw new NotFoundException('The verified hospital report is not available');
+    if (report.pdfData) return { data: Buffer.from(report.pdfData), filename: report.pdfFilename ?? `${member.externalId ?? member.id}-intake.pdf`, mimeType: report.pdfMimeType ?? 'application/pdf' };
+    const reportData = report.report && typeof report.report === 'object' && !Array.isArray(report.report) ? { ...(report.report as Record<string, unknown>) } : {};
+    delete reportData.clinicianTriage;
+    const data = await createMediKioskPdf({ patientName: member.displayName, patientRecordId: member.externalId ?? member.id, generatedAt: report.updatedAt.toISOString(), report: reportData });
+    return { data: Buffer.from(data), filename: `${member.externalId ?? member.id}-intake.pdf`, mimeType: 'application/pdf' };
+  }
+
+  private async findFamilyMemberForViewer(user: AuthUser, abhaId: string) {
+    if (user.role !== 'patient' || !user.patientId) throw new ForbiddenException('Patient access is required to view family records');
+    const normalizedAbhaId = abhaId.trim().toUpperCase();
+    if (!normalizedAbhaId) throw new BadRequestException('A family member ABHA ID is required');
+    const member = await this.prisma.patient.findUnique({ where: { externalId: normalizedAbhaId }, select: { id: true, externalId: true, displayName: true } });
+    if (!member) throw new NotFoundException('No patient record was found for that ABHA ID');
+    if (member.id === user.patientId) throw new BadRequestException('Use My health history to view your own record');
+    return member;
   }
 
   private assertAccess(user: AuthUser, patientId: string): void {

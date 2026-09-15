@@ -5,6 +5,8 @@ import MediKioskPage from './MediKioskPage';
 import PatientNextStepsPage from './PatientNextStepsPage';
 import PatientPrescriptionsPage from './PatientPrescriptionsPage';
 import PatientDocumentsPage from './PatientDocumentsPage';
+import PatientHistoryPage from './PatientHistoryPage';
+import PatientFamilyPage from './PatientFamilyPage';
 import type { Session } from '../queue/types';
 
 type PatientShellProps = {
@@ -13,11 +15,11 @@ type PatientShellProps = {
   onSessionChange: (session: Session) => void;
 };
 
-type PatientPanel = 'token' | 'kiosk' | 'documents' | 'next-steps' | 'prescriptions';
+type PatientPanel = 'token' | 'kiosk' | 'history' | 'family' | 'documents' | 'next-steps' | 'prescriptions';
 
 function panelFromLocation(): PatientPanel {
   const panel = window.location.hash.slice(1);
-  return panel === 'kiosk' || panel === 'documents' || panel === 'next-steps' || panel === 'prescriptions'
+  return panel === 'kiosk' || panel === 'history' || panel === 'family' || panel === 'documents' || panel === 'next-steps' || panel === 'prescriptions'
     ? panel
     : 'token';
 }
@@ -78,14 +80,14 @@ export default function PatientShell({
               </span>
             </div>
             <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1">
-              {(['token', 'kiosk', 'documents', 'next-steps', 'prescriptions'] as const).map((panel) => (
+              {(['token', 'kiosk', 'history', 'family', 'documents', 'next-steps', 'prescriptions'] as const).map((panel) => (
                 <button
                   key={panel}
                   type="button"
                   onClick={() => navigatePanel(panel)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activePanel === panel ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500'}`}
                 >
-                  {{ token: 'Token', kiosk: 'Kiosk', documents: 'Documents', 'next-steps': 'Next Steps', prescriptions: 'Prescriptions' }[panel]}
+                  {{ token: 'Token', kiosk: 'Kiosk', history: 'My history', family: 'Family records', documents: 'Documents', 'next-steps': 'Next Steps', prescriptions: 'Prescriptions' }[panel]}
                 </button>
               ))}
             </div>
@@ -110,6 +112,10 @@ export default function PatientShell({
           />
         ) : activePanel === 'kiosk' ? (
           <MediKioskPage session={session} />
+        ) : activePanel === 'history' ? (
+          <PatientHistoryPage session={session} />
+        ) : activePanel === 'family' ? (
+          <PatientFamilyPage session={session} />
         ) : activePanel === 'documents' ? (
           <PatientDocumentsPage session={session} />
         ) : activePanel === 'prescriptions' ? (

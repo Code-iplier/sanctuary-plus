@@ -144,6 +144,26 @@ export function getPatientPrescriptions(token: string, patientId: string) {
   return request<any[]>(token, `/medikiosk/patients/${encodeURIComponent(patientId)}/prescriptions`);
 }
 
+export function getFamilyMemberHealthSummary(token: string, abhaId: string) {
+  return request<any>(token, `/medikiosk/family-members/${encodeURIComponent(abhaId.trim())}`);
+}
+
+export async function getFamilyMemberDocumentContent(token: string, abhaId: string, documentId: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE}/medikiosk/family-members/${encodeURIComponent(abhaId)}/documents/${encodeURIComponent(documentId)}/content`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(`Unable to open the family record (${response.status})`);
+  return response.blob();
+}
+
+export async function getFamilyMemberReportPdf(token: string, abhaId: string, encounterId: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE}/medikiosk/family-members/${encodeURIComponent(abhaId)}/encounters/${encodeURIComponent(encounterId)}/report-pdf`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(`Unable to open the family hospital report (${response.status})`);
+  return response.blob();
+}
+
 export function getPatientDocuments(token: string, patientId: string) {
   return request<any[]>(token, `/medikiosk/patients/${encodeURIComponent(patientId)}/documents`);
 }
